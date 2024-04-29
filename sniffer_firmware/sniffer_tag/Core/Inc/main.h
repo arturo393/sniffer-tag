@@ -85,6 +85,8 @@ void Error_Handler(void);
 /* USER CODE END EFP */
 
 /* Private defines -----------------------------------------------------------*/
+#define DW3000_RST_Pin GPIO_PIN_0
+#define DW3000_RST_GPIO_Port GPIOA
 #define SPI1_CS_Pin GPIO_PIN_4
 #define SPI1_CS_GPIO_Port GPIOA
 #define DEVICE_SELECT_Pin GPIO_PIN_0

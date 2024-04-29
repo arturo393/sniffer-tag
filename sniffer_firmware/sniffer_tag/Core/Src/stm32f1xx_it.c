@@ -1,3 +1,4 @@
+/* USER CODE BEGIN Header */
 /**
   ******************************************************************************
   * @file    stm32f1xx_it.c
@@ -5,7 +6,7 @@
   ******************************************************************************
   * @attention
   *
-  * Copyright (c) 2023 STMicroelectronics.
+  * Copyright (c) 2024 STMicroelectronics.
   * All rights reserved.
   *
   * This software is licensed under terms that can be found in the LICENSE file
@@ -14,29 +15,51 @@
   *
   ******************************************************************************
   */
+/* USER CODE END Header */
 
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
 #include "stm32f1xx_it.h"
 /* Private includes ----------------------------------------------------------*/
-#include "uwb.h"
-#include "hmi_uart.h"
+/* USER CODE BEGIN Includes */
+/* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
+/* USER CODE BEGIN TD */
+
+/* USER CODE END TD */
 
 /* Private define ------------------------------------------------------------*/
+/* USER CODE BEGIN PD */
+
+/* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
+/* USER CODE BEGIN PM */
+
+/* USER CODE END PM */
 
 /* Private variables ---------------------------------------------------------*/
+/* USER CODE BEGIN PV */
+
+/* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
+/* USER CODE BEGIN PFP */
+
+/* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
+/* USER CODE BEGIN 0 */
+
+/* USER CODE END 0 */
 
 /* External variables --------------------------------------------------------*/
 extern TIM_HandleTypeDef htim4;
 extern UART_HandleTypeDef huart1;
+/* USER CODE BEGIN EV */
+
+/* USER CODE END EV */
 
 /******************************************************************************/
 /*           Cortex-M3 Processor Interruption and Exception Handlers          */
@@ -46,9 +69,14 @@ extern UART_HandleTypeDef huart1;
   */
 void NMI_Handler(void)
 {
-  while (1)
+  /* USER CODE BEGIN NonMaskableInt_IRQn 0 */
+
+  /* USER CODE END NonMaskableInt_IRQn 0 */
+  /* USER CODE BEGIN NonMaskableInt_IRQn 1 */
+   while (1)
   {
   }
+  /* USER CODE END NonMaskableInt_IRQn 1 */
 }
 
 /**
@@ -56,8 +84,13 @@ void NMI_Handler(void)
   */
 void HardFault_Handler(void)
 {
+  /* USER CODE BEGIN HardFault_IRQn 0 */
+
+  /* USER CODE END HardFault_IRQn 0 */
   while (1)
   {
+    /* USER CODE BEGIN W1_HardFault_IRQn 0 */
+    /* USER CODE END W1_HardFault_IRQn 0 */
   }
 }
 
@@ -66,8 +99,13 @@ void HardFault_Handler(void)
   */
 void MemManage_Handler(void)
 {
+  /* USER CODE BEGIN MemoryManagement_IRQn 0 */
+
+  /* USER CODE END MemoryManagement_IRQn 0 */
   while (1)
   {
+    /* USER CODE BEGIN W1_MemoryManagement_IRQn 0 */
+    /* USER CODE END W1_MemoryManagement_IRQn 0 */
   }
 }
 
@@ -76,8 +114,13 @@ void MemManage_Handler(void)
   */
 void BusFault_Handler(void)
 {
+  /* USER CODE BEGIN BusFault_IRQn 0 */
+
+  /* USER CODE END BusFault_IRQn 0 */
   while (1)
   {
+    /* USER CODE BEGIN W1_BusFault_IRQn 0 */
+    /* USER CODE END W1_BusFault_IRQn 0 */
   }
 }
 
@@ -86,8 +129,13 @@ void BusFault_Handler(void)
   */
 void UsageFault_Handler(void)
 {
+  /* USER CODE BEGIN UsageFault_IRQn 0 */
+
+  /* USER CODE END UsageFault_IRQn 0 */
   while (1)
   {
+    /* USER CODE BEGIN W1_UsageFault_IRQn 0 */
+    /* USER CODE END W1_UsageFault_IRQn 0 */
   }
 }
 
@@ -96,6 +144,12 @@ void UsageFault_Handler(void)
   */
 void SVC_Handler(void)
 {
+  /* USER CODE BEGIN SVCall_IRQn 0 */
+
+  /* USER CODE END SVCall_IRQn 0 */
+  /* USER CODE BEGIN SVCall_IRQn 1 */
+
+  /* USER CODE END SVCall_IRQn 1 */
 }
 
 /**
@@ -103,6 +157,12 @@ void SVC_Handler(void)
   */
 void DebugMon_Handler(void)
 {
+  /* USER CODE BEGIN DebugMonitor_IRQn 0 */
+
+  /* USER CODE END DebugMonitor_IRQn 0 */
+  /* USER CODE BEGIN DebugMonitor_IRQn 1 */
+
+  /* USER CODE END DebugMonitor_IRQn 1 */
 }
 
 /**
@@ -110,6 +170,12 @@ void DebugMon_Handler(void)
   */
 void PendSV_Handler(void)
 {
+  /* USER CODE BEGIN PendSV_IRQn 0 */
+
+  /* USER CODE END PendSV_IRQn 0 */
+  /* USER CODE BEGIN PendSV_IRQn 1 */
+
+  /* USER CODE END PendSV_IRQn 1 */
 }
 
 /**
@@ -117,8 +183,13 @@ void PendSV_Handler(void)
   */
 void SysTick_Handler(void)
 {
-	time32_incr++;
-	HAL_IncTick();
+  /* USER CODE BEGIN SysTick_IRQn 0 */
+
+  /* USER CODE END SysTick_IRQn 0 */
+  HAL_IncTick();
+  /* USER CODE BEGIN SysTick_IRQn 1 */
+
+  /* USER CODE END SysTick_IRQn 1 */
 }
 
 /******************************************************************************/
@@ -133,7 +204,13 @@ void SysTick_Handler(void)
   */
 void TIM4_IRQHandler(void)
 {
+  /* USER CODE BEGIN TIM4_IRQn 0 */
+
+  /* USER CODE END TIM4_IRQn 0 */
   HAL_TIM_IRQHandler(&htim4);
+  /* USER CODE BEGIN TIM4_IRQn 1 */
+
+  /* USER CODE END TIM4_IRQn 1 */
 }
 
 /**
@@ -141,40 +218,15 @@ void TIM4_IRQHandler(void)
   */
 void USART1_IRQHandler(void)
 {
+  /* USER CODE BEGIN USART1_IRQn 0 */
+
+  /* USER CODE END USART1_IRQn 0 */
   HAL_UART_IRQHandler(&huart1);
+  /* USER CODE BEGIN USART1_IRQn 1 */
+
+  /* USER CODE END USART1_IRQn 1 */
 }
 
-void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
-{
-    if(htim->Instance == htim4.Instance)
-    {
-        if(flags.opt_1ms_flag < 10)
-            flags.opt_1ms_flag++;
-        if(flags.key_presstime > 0)
-            flags.key_presstime++;
+/* USER CODE BEGIN 1 */
 
-        if(flags.uart_recv_time > 0)
-            flags.uart_recv_time++;
-        if(flags.uart_recv_time > 10)
-        {
-            flags.uart_recv_time = 0;
-            flags.uart_recv = 1;
-        }
-
-        if(flags.time_to_allow_run > 0)
-        {
-            flags.time_to_allow_run++;
-            if(flags.time_to_allow_run > flags.target_allow_run_time)
-            {
-                flags.time_to_allow_run = 0;
-                flags.func_allow_run = 1;
-            }
-        }
-
-        if(flags.option_timeout > 0)
-            flags.option_timeout++;
-
-        if(flags.ds_twr_timeout > 0)
-            flags.ds_twr_timeout++;
-    }
-}
+/* USER CODE END 1 */
