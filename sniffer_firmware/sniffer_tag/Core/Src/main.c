@@ -33,6 +33,8 @@
 /* Private typedef -----------------------------------------------------------*/
 /* USER CODE BEGIN PTD */
 struct flags_t flags;
+double *distance_ptr;
+TAG_t tag;
 /* USER CODE END PTD */
 
 /* Private define ------------------------------------------------------------*/
@@ -120,60 +122,98 @@ int main(void) {
 	 */
 	HAL_GPIO_WritePin(GPIOA, DW3000_RST_Pin, GPIO_PIN_SET);
 
-	dwt_local_data_t dwt_local_data ; // Local device data, can be an array to support multiple DW3000 testing applications/platforms
+	dwt_local_data_t dwt_local_data; // Local device data, can be an array to support multiple DW3000 testing applications/platforms
 
 	/* Default communication configuration. We use default non-STS DW mode. */
-	dwt_config_t defatult_dwt_config = {
-			5, /* Channel number. */
-			DWT_PLEN_128, /* Preamble length. Used in TX only. */
-			DWT_PAC8, /* Preamble acquisition chunk size. Used in RX only. */
-			9, /* TX preamble code. Used in TX only. */
-			9, /* RX preamble code. Used in RX only. */
-			1, /* 0 to use standard 8 symbol SFD, 1 to use non-standard 8 symbol, 2 for non-standard 16 symbol SFD and 3 for 4z 8 symbol SDF type */
-			DWT_BR_6M8, /* Data rate. */
-			DWT_PHRMODE_STD, /* PHY header mode. */
-			DWT_PHRRATE_STD, /* PHY header rate. */
-			(129 + 8 - 8), /* SFD timeout (preamble length + 1 + SFD length - PAC size). Used in RX only. */
-			DWT_STS_MODE_OFF, /* STS disabled */
-			DWT_STS_LEN_64,/* STS length see allowed values in Enum dwt_sts_lengths_e */
-			DWT_PDOA_M0 /* PDOA mode off */
+	dwt_config_t defatult_dwt_config = { 5, /* Channel number. */
+	DWT_PLEN_128, /* Preamble length. Used in TX only. */
+	DWT_PAC8, /* Preamble acquisition chunk size. Used in RX only. */
+	9, /* TX preamble code. Used in TX only. */
+	9, /* RX preamble code. Used in RX only. */
+	1, /* 0 to use standard 8 symbol SFD, 1 to use non-standard 8 symbol, 2 for non-standard 16 symbol SFD and 3 for 4z 8 symbol SDF type */
+	DWT_BR_6M8, /* Data rate. */
+	DWT_PHRMODE_STD, /* PHY header mode. */
+	DWT_PHRRATE_STD, /* PHY header rate. */
+	(129 + 8 - 8), /* SFD timeout (preamble length + 1 + SFD length - PAC size). Used in RX only. */
+	DWT_STS_MODE_OFF, /* STS disabled */
+	DWT_STS_LEN_64,/* STS length see allowed values in Enum dwt_sts_lengths_e */
+	DWT_PDOA_M0 /* PDOA mode off */
 	};
 
 	/* Values for the PG_DELAY and TX_POWER registers reflect the bandwidth and power of the spectrum at the current
 	 * temperature. These values can be calibrated prior to taking reference measurements. See NOTE 8 below. */
-	static dwt_txconfig_t defatult_dwt_txconfig =
-	{
-	    0x34,           /* PG delay. */
-	    0xfdfdfdfd,      /* TX power. */
-	    0x0             /*PG count*/
+	static dwt_txconfig_t defatult_dwt_txconfig = { 0x34, /* PG delay. */
+	0xfdfdfdfd, /* TX power. */
+	0x0 /*PG count*/
 	};
 
-	if (tag_initiator_init(&defatult_dwt_config,&defatult_dwt_txconfig,&dwt_local_data) == 1)
+	if (tag_initiator_init(&defatult_dwt_config, &defatult_dwt_txconfig,
+			&dwt_local_data) == 1)
 		Error_Handler();
+
+	/* Frames used in the ranging process. See NOTE 2 below. */
+	uint8_t tx_poll_msg[] = { 0x41, 0x88, 0, 0xCA, 0xDE, 'W', 'A', 'V', 'E',
+			0x21 };
+	uint8_t rx_resp_msg[] = { 0x41, 0x88, 0, 0xCA, 0xDE, 'V', 'E', 'W', 'A',
+			0xE1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
+	uint8_t tx_final_msg[] = { 0x41, 0x88, 0, 0xCA, 0xDE, 'W', 'A', 'V', 'E',
+			0x23, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
+
+	int rets;
+	/* Hold copy of status register state here for reference so that it can be examined at a debug breakpoint. */
+	uint32_t status_reg = 0;
+	uint32_t frame_seq_nb = 0;
+	uint8_t rx_buffer[RX_BUF_LEN];
+	Distance_t distance;
+	distance.counter = 0;
+	/* Time-stamps of frames transmission/reception, expressed in device time units. */
+
 	/* USER CODE END 2 */
 
 	/* Infinite loop */
 	/* USER CODE BEGIN WHILE */
 	while (1) {
-		/*
-		 if(flags.opt_1ms_flag == 10)
-		 {
-		 flags.opt_1ms_flag = 0;
-		 key_scan();
-		 }
-		 */
 
-		/* Receive information from the HMI display */
-		/*hmi_recv();
-		 if(flags.func_allow_run == 1)
-		 {
-		 flags.func_allow_run = 0;
-		 if(flags.function != NULL)
-		 flags.function();	//Run sample program
-		 }
-		 */
+		/* Write frame data to DW IC and prepare transmission. See NOTE 9 below. */
+		tx_poll_msg[ALL_MSG_SN_IDX] = frame_seq_nb;
+		dwt_writetxdata(sizeof(tx_poll_msg), tx_poll_msg, 0); /* Zero offset in TX buffer. */
+		dwt_writetxfctrl(sizeof(tx_poll_msg) + FCS_LEN, 0, 1); /* Zero offset in TX buffer, ranging. */
 
-		tag_initiator();
+		/* Start transmission, indicating that a response is expected so that reception is enabled automatically after the frame is sent and the delay
+		 * set by dwt_setrxaftertxdelay() has elapsed. */
+		rets = dwt_starttx(DWT_START_TX_IMMEDIATE | DWT_RESPONSE_EXPECTED);
+		if (rets == DWT_SUCCESS) {
+			/* We assume that the transmission is achieved correctly, poll for reception of a frame or error/timeout. See NOTE 10 below. */
+			while (!((status_reg = dwt_read32bitreg(SYS_STATUS_ID))
+					& (SYS_STATUS_RXFCG_BIT_MASK | SYS_STATUS_ALL_RX_TO
+							| SYS_STATUS_ALL_RX_ERR))) {
+			};
+
+			if (status_reg & SYS_STATUS_RXFCG_BIT_MASK) {
+				uint32_t frame_len;
+
+				/* Clear good RX frame event and TX frame sent in the DW IC status register. */
+				dwt_write32bitreg(SYS_STATUS_ID,
+						SYS_STATUS_RXFCG_BIT_MASK | SYS_STATUS_TXFRS_BIT_MASK);
+
+				/* A frame has been received, read it into the local buffer. */
+				frame_len = dwt_read32bitreg(RX_FINFO_ID) & FRAME_LEN_MAX_EX;
+				if (frame_len <= RX_BUF_LEN) {
+					dwt_readrxdata(rx_buffer, frame_len, 0);
+				}
+				/* Check that the frame is the expected response from the companion "DS TWR responder" example.
+				 * As the sequence number field of the frame is not relevant, it is cleared to simplify the validation of the frame. */
+				rx_buffer[ALL_MSG_SN_IDX] = 0;
+				if (memcmp(rx_buffer, rx_resp_msg, ALL_MSG_COMMON_LEN) == 0) {
+					tag.distance = calculate_tag_distance(rx_buffer,&distance);
+					send_message_with_timestamps(tx_final_msg,sizeof(tx_final_msg),frame_seq_nb);
+				}
+			} else {
+				/* Clear RX error/timeout events in the DW IC status register. */
+				dwt_write32bitreg(SYS_STATUS_ID,
+						SYS_STATUS_ALL_RX_TO | SYS_STATUS_ALL_RX_ERR | SYS_STATUS_TXFRS_BIT_MASK);
+			}
+		}
 
 		/* Target specific drive of RSTn line into DW IC low for a period. */
 
