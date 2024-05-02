@@ -101,6 +101,8 @@ void Error_Handler(void);
 #define KEY_BACK_GPIO_Port GPIOB
 #define SPI2_CS_Pin GPIO_PIN_12
 #define SPI2_CS_GPIO_Port GPIOB
+#define DW3000_RST_RCV_Pin GPIO_PIN_8
+#define DW3000_RST_RCV_GPIO_Port GPIOA
 
 /* USER CODE BEGIN Private defines */
 
