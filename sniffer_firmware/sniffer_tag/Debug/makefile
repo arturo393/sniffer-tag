@@ -63,8 +63,8 @@ all: main-build
 main-build: sniffer_tag.elf secondary-outputs
 
 # Tool invocations
-sniffer_tag.elf sniffer_tag.map: $(OBJS) $(USER_OBJS) /home/uqommdev/STM32CubeIDE/sniffer-tag/tag/STM32F103C8TX_FLASH.ld makefile objects.list $(OPTIONAL_TOOL_DEPS)
-	arm-none-eabi-gcc -o "sniffer_tag.elf" @"objects.list" $(USER_OBJS) $(LIBS) -mcpu=cortex-m3 -T"/home/uqommdev/STM32CubeIDE/sniffer-tag/tag/STM32F103C8TX_FLASH.ld" --specs=nosys.specs -Wl,-Map="sniffer_tag.map" -Wl,--gc-sections -static --specs=nano.specs -mfloat-abi=soft -mthumb -Wl,--start-group -lc -lm -Wl,--end-group
+sniffer_tag.elf sniffer_tag.map: $(OBJS) $(USER_OBJS) /home/uqommdev/development/sniffer-tag/sniffer_firmware/sniffer_tag/STM32F103C8TX_FLASH.ld makefile objects.list $(OPTIONAL_TOOL_DEPS)
+	arm-none-eabi-gcc -o "sniffer_tag.elf" @"objects.list" $(USER_OBJS) $(LIBS) -mcpu=cortex-m3 -T"/home/uqommdev/development/sniffer-tag/sniffer_firmware/sniffer_tag/STM32F103C8TX_FLASH.ld" --specs=nosys.specs -Wl,-Map="sniffer_tag.map" -Wl,--gc-sections -static --specs=nano.specs -mfloat-abi=soft -mthumb -u _printf_float -Wl,--start-group -lc -lm -Wl,--end-group
 	@echo 'Finished building target: $@'
 	@echo ' '
 

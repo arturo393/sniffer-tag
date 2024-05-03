@@ -60,8 +60,8 @@ all: main-build
 main-build: TAG.elf secondary-outputs
 
 # Tool invocations
-TAG.elf TAG.map: $(OBJS) $(USER_OBJS) C:\Users\claudio\Documents\FIRMWARE-SNIIFER-TAG-UWBDEMO\STM32F103C8TX_FLASH.ld makefile objects.list $(OPTIONAL_TOOL_DEPS)
-	arm-none-eabi-gcc -o "TAG.elf" @"objects.list" $(USER_OBJS) $(LIBS) -mcpu=cortex-m3 -T"C:\Users\claudio\Documents\FIRMWARE-SNIIFER-TAG-UWBDEMO\STM32F103C8TX_FLASH.ld" --specs=nosys.specs -Wl,-Map="TAG.map" -Wl,--gc-sections -static --specs=nano.specs -mfloat-abi=soft -mthumb -u _printf_float -u _scanf_float -Wl,--start-group -lc -lm -Wl,--end-group
+TAG.elf TAG.map: $(OBJS) $(USER_OBJS) /home/uqommdev/development/sniffer-tag/sniffer_firmware/FIRMWARE-SNIIFER-TAG-UWBDEMO/STM32F103C8TX_FLASH.ld makefile objects.list $(OPTIONAL_TOOL_DEPS)
+	arm-none-eabi-gcc -o "TAG.elf" @"objects.list" $(USER_OBJS) $(LIBS) -mcpu=cortex-m3 -T"/home/uqommdev/development/sniffer-tag/sniffer_firmware/FIRMWARE-SNIIFER-TAG-UWBDEMO/STM32F103C8TX_FLASH.ld" --specs=nosys.specs -Wl,-Map="TAG.map" -Wl,--gc-sections -static --specs=nano.specs -mfloat-abi=soft -mthumb -u _printf_float -u _scanf_float -Wl,--start-group -lc -lm -Wl,--end-group
 	@echo 'Finished building target: $@'
 	@echo ' '
 

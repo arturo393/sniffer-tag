@@ -26,7 +26,7 @@ Core/Src/Application.o: ../Core/Src/Application.c \
  ../Drivers/STM32F1xx_HAL_Driver/Inc/stm32f1xx_hal_tim.h \
  ../Drivers/STM32F1xx_HAL_Driver/Inc/stm32f1xx_hal_tim_ex.h \
  ../Drivers/STM32F1xx_HAL_Driver/Inc/stm32f1xx_hal_uart.h \
- ../Core/Inc/uwb_examples.h ../Core/Inc/application.h ../Core/Inc/uwb.h \
+ ../Core/Inc/uwb_examples.h ../Core/Inc/Application.h ../Core/Inc/uwb.h \
  ../Core/Inc/deca_types.h ../Core/Inc/deca_device_api.h \
  ../Core/Inc/deca_regs.h ../Core/Inc/deca_vals.h \
  ../Core/Inc/shared_defines.h ../Core/Inc/shared_functions.h \
@@ -61,7 +61,7 @@ Core/Src/Application.o: ../Core/Src/Application.c \
 ../Drivers/STM32F1xx_HAL_Driver/Inc/stm32f1xx_hal_tim_ex.h:
 ../Drivers/STM32F1xx_HAL_Driver/Inc/stm32f1xx_hal_uart.h:
 ../Core/Inc/uwb_examples.h:
-../Core/Inc/application.h:
+../Core/Inc/Application.h:
 ../Core/Inc/uwb.h:
 ../Core/Inc/deca_types.h:
 ../Core/Inc/deca_device_api.h:

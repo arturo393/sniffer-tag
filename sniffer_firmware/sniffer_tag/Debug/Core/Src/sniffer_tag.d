@@ -1,5 +1,5 @@
-Core/Src/ds_twr_initiator.o: ../Core/Src/ds_twr_initiator.c \
- ../Core/Inc/uwb_examples.h ../Core/Inc/Application.h ../Core/Inc/main.h \
+Core/Src/sniffer_tag.o: ../Core/Src/sniffer_tag.c \
+ ../Core/Inc/sniffer_tag.h ../Core/Inc/main.h \
  ../Drivers/STM32F1xx_HAL_Driver/Inc/stm32f1xx_hal.h \
  ../Core/Inc/stm32f1xx_hal_conf.h \
  ../Drivers/STM32F1xx_HAL_Driver/Inc/stm32f1xx_hal_rcc.h \
@@ -26,12 +26,8 @@ Core/Src/ds_twr_initiator.o: ../Core/Src/ds_twr_initiator.c \
  ../Drivers/STM32F1xx_HAL_Driver/Inc/stm32f1xx_hal_tim.h \
  ../Drivers/STM32F1xx_HAL_Driver/Inc/stm32f1xx_hal_tim_ex.h \
  ../Drivers/STM32F1xx_HAL_Driver/Inc/stm32f1xx_hal_uart.h \
- ../Core/Inc/uwb.h ../Core/Inc/deca_types.h ../Core/Inc/deca_device_api.h \
- ../Core/Inc/deca_regs.h ../Core/Inc/deca_vals.h \
- ../Core/Inc/shared_defines.h ../Core/Inc/shared_functions.h \
- ../Core/Inc/example_selection.h ../Core/Inc/hmi_uart.h
-../Core/Inc/uwb_examples.h:
-../Core/Inc/Application.h:
+ ../Core/Inc/uwb3000Fxx.h ../Core/Inc/deca_regs.h ../Core/Inc/deca_vals.h
+../Core/Inc/sniffer_tag.h:
 ../Core/Inc/main.h:
 ../Drivers/STM32F1xx_HAL_Driver/Inc/stm32f1xx_hal.h:
 ../Core/Inc/stm32f1xx_hal_conf.h:
@@ -59,12 +55,6 @@ Core/Src/ds_twr_initiator.o: ../Core/Src/ds_twr_initiator.c \
 ../Drivers/STM32F1xx_HAL_Driver/Inc/stm32f1xx_hal_tim.h:
 ../Drivers/STM32F1xx_HAL_Driver/Inc/stm32f1xx_hal_tim_ex.h:
 ../Drivers/STM32F1xx_HAL_Driver/Inc/stm32f1xx_hal_uart.h:
-../Core/Inc/uwb.h:
-../Core/Inc/deca_types.h:
-../Core/Inc/deca_device_api.h:
+../Core/Inc/uwb3000Fxx.h:
 ../Core/Inc/deca_regs.h:
 ../Core/Inc/deca_vals.h:
-../Core/Inc/shared_defines.h:
-../Core/Inc/shared_functions.h:
-../Core/Inc/example_selection.h:
-../Core/Inc/hmi_uart.h:

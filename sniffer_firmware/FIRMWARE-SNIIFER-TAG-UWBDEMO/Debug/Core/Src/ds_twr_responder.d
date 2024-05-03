@@ -1,5 +1,5 @@
 Core/Src/ds_twr_responder.o: ../Core/Src/ds_twr_responder.c \
- ../Core/Inc/uwb_examples.h ../Core/Inc/application.h ../Core/Inc/main.h \
+ ../Core/Inc/uwb_examples.h ../Core/Inc/Application.h ../Core/Inc/main.h \
  ../Drivers/STM32F1xx_HAL_Driver/Inc/stm32f1xx_hal.h \
  ../Core/Inc/stm32f1xx_hal_conf.h \
  ../Drivers/STM32F1xx_HAL_Driver/Inc/stm32f1xx_hal_rcc.h \
@@ -31,7 +31,7 @@ Core/Src/ds_twr_responder.o: ../Core/Src/ds_twr_responder.c \
  ../Core/Inc/shared_defines.h ../Core/Inc/shared_functions.h \
  ../Core/Inc/example_selection.h ../Core/Inc/hmi_uart.h ../Core/Inc/key.h
 ../Core/Inc/uwb_examples.h:
-../Core/Inc/application.h:
+../Core/Inc/Application.h:
 ../Core/Inc/main.h:
 ../Drivers/STM32F1xx_HAL_Driver/Inc/stm32f1xx_hal.h:
 ../Core/Inc/stm32f1xx_hal_conf.h:

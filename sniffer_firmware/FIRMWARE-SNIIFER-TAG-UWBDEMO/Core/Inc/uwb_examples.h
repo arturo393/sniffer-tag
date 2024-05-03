@@ -1,7 +1,7 @@
 #ifndef UWB_EXAMPLE_H
 #define UWB_EXAMPLE_H
 
-#include "application.h"
+#include "Application.h"
 #include "uwb.h"
 #include "deca_device_api.h"
 #include "deca_regs.h"

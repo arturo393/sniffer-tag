@@ -674,8 +674,6 @@ typedef struct {
 #define DW3000_SPI_FARW     (0<<6 | 0<<0)
 #define DW3000_SPI_EAMRW    (1<<6)
 
-/* Length of the common part of the message (up to and including the function code, see NOTE 2 below). */
-#define ALL_MSG_COMMON_LEN 10
 /* Indexes to access some of the fields in the frames defined above. */
 #define ALL_MSG_SN_IDX 2
 #define FINAL_MSG_POLL_TX_TS_IDX 10
@@ -710,8 +708,7 @@ typedef struct {
 /* Inter-ranging delay period, in milliseconds. */
 #define RNG_DELAY_MS 1000
 
-/* Length of the common part of the message (up to and including the function code, see NOTE 2 below). */
-#define ALL_MSG_COMMON_LEN 10
+
 /* Indexes to access some of the fields in the frames defined above. */
 #define ALL_MSG_SN_IDX 2
 #define FINAL_MSG_POLL_TX_TS_IDX 10
@@ -862,16 +859,7 @@ typedef struct {
 #define STS_HIGH_NOISE_THREASH_ERR 20
 #define STS_NON_TRIANGLE_ERR 21
 #define STS_LOG_REG_FAILED_ERR 22
-typedef struct {
-	double tof;
-	double value;
-	double readings[DISTANCE_READINGS];
-	double new[DISTANCE_READINGS];
-	double sum;
-	double last;
-	uint8_t error_times;
-	uint8_t counter;
-} Distance_t;
+
 // -------------------------------------------------------------------------------------------------------------------
 // Data for DW3000 Decawave Transceiver control
 //
@@ -910,12 +898,7 @@ typedef struct {
 	uint16_t nrstPin;
 } SPI_HW_t;
 
-typedef struct {
-	uint32_t id;
-	uint32_t timestamp;
-	double distance;
-	SPI_HW_t *hw;
-} TAG_t;
+
 
 extern SPI_HW_t *hw;
 extern dwt_local_data_t *pdw3000local;
@@ -930,11 +913,6 @@ int dwt_config2(dwt_config_t *config, dwt_local_data_t *dwt_local_data);
 uint16_t get_sts_mnth(uint16_t sts, uint8_t default_threshold,
 		uint8_t shift_val);
 void _dwt_kick_dgc_on_wakeup(int8_t channel);
-double calculate_tag_distance(uint8_t *rx_buffer, Distance_t *distance);
-uint8_t send_message_with_timestamps(uint8_t *tx_final_msg, uint8_t size,
-		uint32_t frame_seq_nb2);
-uint32_t send_response_with_timestamps(uint8_t *tx_resp_msg, uint8_t size,
-		uint32_t frame_seq_nb);
 
 int dwt_writetxdata(uint16_t txDataLength, uint8_t *txDataBytes,
 		uint16_t txBufferOffset);
