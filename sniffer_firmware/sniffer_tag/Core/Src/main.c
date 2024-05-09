@@ -21,7 +21,7 @@
 #include "main.h"
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-#include "stdlib.h"
+
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -30,7 +30,7 @@ struct flags_t flags;
 double *distance_ptr;
 TAG_t *tag;
 int size = 0;
-uint8_t running_device = DEV_UWB3000F27;
+uint8_t running_device = DEV_UWB3000F00;
 SPI_HW_t *hw;
 dwt_local_data_t *pdw3000local;
 uint8_t crcTable[256];
@@ -110,16 +110,7 @@ int main(void) {
 	MX_TIM4_Init();
 	MX_USART1_UART_Init();
 	/* USER CODE BEGIN 2 */
-	/*
-	 uint8_t addr[3] = {0};
-	 uint8_t addr_count= 0;
-	 for(i=1; i<128; i++)
-	 {
-	 ret = HAL_I2C_IsDeviceReady(&hi2c1, (uint16_t)(i<<1), 3, 5);
-	 if(ret == HAL_OK)
-	 addr[addr_count++]=i;
-	 }
-	 */
+
 	HAL_GPIO_WritePin(GPIOA, DW3000_RST_Pin, GPIO_PIN_SET);
 	/*Local device data, can be an array to support multiple DW3000 testing applications/platforms */
 
@@ -140,23 +131,6 @@ int main(void) {
 	DWT_STS_LEN_64,/* STS length see allowed values in Enum dwt_sts_lengths_e */
 	DWT_PDOA_M0 /* PDOA mode off */
 	};
-
-//	dwt_config_t config_options = {
-//	    9,                  /* Channel number. */
-//	    DWT_PLEN_512,       /* Preamble length. Used in TX only. */
-//	    DWT_PAC8,           /* Preamble acquisition chunk size. Used in RX only. */
-//	    10,                  /* TX preamble code. Used in TX only. */
-//	    10,                  /* RX preamble code. Used in RX only. */
-//	    3,                  /* 0 to use standard 8 symbol SFD, 1 to use non-standard 8 symbol, 2 for non-standard 16 symbol SFD and 3 for 4z 8 symbol SDF type */
-//	    DWT_BR_6M8,         /* Data rate. */
-//	    DWT_PHRMODE_STD,    /* PHY header mode. */
-//	    DWT_PHRRATE_STD,    /* PHY header rate. */
-//	    (512 + 1 + 8 - 8),  /* SFD timeout (preamble length + 1 + SFD length - PAC size). Used in RX only. */
-//	    DWT_STS_MODE_1,      /* Mode 1 STS enabled */
-//	    DWT_STS_LEN_64,      /* STS length*/
-//	    DWT_PDOA_M0         /* PDOA mode off */
-//	};
-
 	/* Values for the PG_DELAY and TX_POWER registers reflect the bandwidth and power of the spectrum at the current
 	 * temperature. These values can be calibrated prior to taking reference measurements. See NOTE 8 below. */
 	static dwt_txconfig_t defatult_dwt_txconfig = { 0x34, /* PG delay. */
@@ -164,38 +138,20 @@ int main(void) {
 	0x0 /*PG count*/
 	};
 
-
 	uint8_t dist_str[30];
 	int size;
 	hw = malloc(sizeof(SPI_HW_t));
 	if (hw == NULL)
 		Error_Handler();
 
-	switch (running_device) {
-
-	case DEV_UWB3000F27:
-		hw->spi = &hspi1;
-		hw->nrstPin = DW3000_RST_Pin;
-		hw->nrstPort = DW3000_RST_GPIO_Port;
-		hw->nssPin = SPI1_CS_Pin;
-		hw->nssPort = SPI1_CS_GPIO_Port;
-		size = sprintf((char*) dist_str, "\n\rDEV_UWB3000F27 init\n\r");
-		HAL_UART_Transmit(&huart1, dist_str, (uint16_t) size,
-		HAL_MAX_DELAY);
-		break;
-	case DEV_UWB3000F00:
-		hw->spi = &hspi2;
-		hw->nrstPin = DW3000_RST_RCV_Pin;
-		hw->nrstPort = DW3000_RST_RCV_GPIO_Port;
-		hw->nssPin = SPI2_CS_Pin;
-		hw->nssPort = SPI2_CS_GPIO_Port;
-		size = sprintf((char*) dist_str, "\n\rDEV_UWB3000F00 init\n\r");
-		HAL_UART_Transmit(&huart1, dist_str, (uint16_t) size,
-		HAL_MAX_DELAY);
-		break;
-	default:
-		break;
-	}
+	hw->spi = &hspi1;
+	hw->nrstPin = DW3000_RST_Pin;
+	hw->nrstPort = DW3000_RST_GPIO_Port;
+	hw->nssPin = SPI1_CS_Pin;
+	hw->nssPort = SPI1_CS_GPIO_Port;
+	size = sprintf((char*) dist_str, "\n\rDEV_UWB3000F27 init\n\r");
+	HAL_UART_Transmit(&huart1, dist_str, (uint16_t) size,
+	HAL_MAX_DELAY);
 
 	HAL_GPIO_WritePin(hw->nrstPort, hw->nrstPin, GPIO_PIN_RESET);/* Target specific drive of RSTn line into DW IC low for a period. */
 	HAL_Delay(1);
@@ -216,6 +172,12 @@ int main(void) {
 	tag->distance.error_times = 0;
 	tag->detection_times = 0;
 	tag->id = 0;
+	for (uint8_t i = 0; i < DISTANCE_READINGS; i++) {
+		tag->distance.readings[i] = 0;
+		tag->distance.new[i] = 0;
+	}
+
+	TAG_STATUS_t tag_status;
 	/* Time-stamps of frames transmission/reception, expressed in device time units. */
 	/* USER CODE END 2 */
 
@@ -223,17 +185,53 @@ int main(void) {
 	/* USER CODE BEGIN WHILE */
 	while (1) {
 
-		switch (running_device) {
-		case DEV_UWB3000F27:
-			handle_sniffer_tag(tag);
+		tag_status = handle_sniffer_tag(tag);
+
+		switch (tag_status) {
+		case TAG_NO_RXCG_DETECTED:
+			// Handle the case when no RXCG is detected
+			uart_transmit_string("TAG_NO_RXCG_DETECTED\n\r");
+			break;
+		case TAG_RX_FRAME_TIMEOUT:
+			uart_transmit_string("TAG_RX_FRAME_TIMEOUT\n\r");
+			// Handle the case when there is a RX timeout
+			break;
+		case TAG_RX_PREAMBLE_DETECTION_TIMEOUT:
+			uart_transmit_string("TAG_RX_PREAMBLE_DETECTION_TIMEOUT\n\r");
+			// Handle the case when there is a RX timeout
+			break;
+		case TAG_RX_CRC_VALID:
+			// Handle the case when the RX CRC is valid
+			break;
+		case TAG_RX_ERROR:
+			uart_transmit_string("TAG_RX_ERROR\n\r");
+			break;
+			break;
+		case TAG_RX_DATA_ZERO:
+			// Handle the case when there is no RX data
+			break;
+		case TAG_OK:
+			// Handle the case when everything is OK
+			break;
+		case TAG_NO_RESPONSE:
+			// Handle the case when there is no response
+			break;
+		case TAG_HUMAN_DISTANCE_OK:
+			uart_transmit_string("distance: ");
+			uart_transmit_float_to_text(tag->distance.value);
+			break;
+		case TAG_RX_NO_COMMAND:
+			uart_transmit_string("TAG_RX_NO_COMMAND\n\r");
+			break;
+		case TAG_TX_ERROR:
+			uart_transmit_string("TAG_TX_ERROR\n\r");
 			break;
 
-		case DEV_UWB3000F00:
-			handle_human_tag(tag);
-			break;
 		default:
+			// Handle any other cases not explicitly covered
 			break;
 		}
+
 		/* USER CODE END WHILE */
 
 		/* USER CODE BEGIN 3 */
