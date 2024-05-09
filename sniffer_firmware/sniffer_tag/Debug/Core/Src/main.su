@@ -1,3 +1,0 @@
-../Core/Src/main.c:472:6:SystemClock_Config	80	static,ignoring_inline_asm
-../Core/Src/main.c:82:5:main	504	static,ignoring_inline_asm
-../Core/Src/main.c:718:6:Error_Handler	0	static,ignoring_inline_asm
