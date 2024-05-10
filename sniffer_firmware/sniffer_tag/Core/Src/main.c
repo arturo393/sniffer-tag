@@ -171,8 +171,10 @@ int main(void) {
 	tag->distance.last = 0;
 	tag->distance.error_times = 0;
 	tag->detection_times = 0;
+	tag->distance.value = 0;
+	tag->distance.sum = 0;
 	tag->id = 0;
-	for (uint8_t i = 0; i < DISTANCE_READINGS; i++) {
+	for (int i = 0; i < DISTANCE_READINGS; i++) {
 		tag->distance.readings[i] = 0;
 		tag->distance.new[i] = 0;
 	}
@@ -190,14 +192,14 @@ int main(void) {
 		switch (tag_status) {
 		case TAG_NO_RXCG_DETECTED:
 			// Handle the case when no RXCG is detected
-			uart_transmit_string("TAG_NO_RXCG_DETECTED\n\r");
+			uart_transmit_string("TAG_NO_RXCG_DETECTED\r");
 			break;
 		case TAG_RX_FRAME_TIMEOUT:
-			uart_transmit_string("TAG_RX_FRAME_TIMEOUT\n\r");
+			uart_transmit_string("TAG_RX_FRAME_TIMEOUT\r");
 			// Handle the case when there is a RX timeout
 			break;
 		case TAG_RX_PREAMBLE_DETECTION_TIMEOUT:
-			uart_transmit_string("TAG_RX_PREAMBLE_DETECTION_TIMEOUT\n\r");
+			uart_transmit_string("TAG_RX_PREAMBLE_DETECTION_TIMEOUT\r");
 			// Handle the case when there is a RX timeout
 			break;
 		case TAG_RX_CRC_VALID:
@@ -210,13 +212,27 @@ int main(void) {
 		case TAG_RX_DATA_ZERO:
 			// Handle the case when there is no RX data
 			break;
+		case TAG_NO_RESPONSE:
+			break;
 		case TAG_OK:
 			// Handle the case when everything is OK
 			break;
-		case TAG_NO_RESPONSE:
-			// Handle the case when there is no response
+		case TAG_RESET:
+			tag->distance.counter = 0;
+			tag->distance.last = 0;
+			tag->distance.error_times = 0;
+			tag->detection_times = 0;
+			tag->id = 0;
+			tag->distance.value = 0;
+			tag->distance.sum = 0;
+			for (int i = 0; i < DISTANCE_READINGS; i++) {
+				tag->distance.readings[i] = 0;
+				tag->distance.new[i] = 0;
+			}
 			break;
 		case TAG_HUMAN_DISTANCE_OK:
+			uart_transmit_string("times: ");
+			uart_transmit_int_to_text(tag->detection_times++);
 			uart_transmit_string("distance: ");
 			uart_transmit_float_to_text(tag->distance.value);
 			break;

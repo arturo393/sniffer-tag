@@ -30,7 +30,7 @@ typedef struct {
 
 typedef struct {
 	uint32_t id;
-	uint64_t detection_times;
+	int detection_times;
 	Distance_t distance;
 } TAG_t;
 
@@ -54,11 +54,13 @@ typedef enum{
 	TAG_RX_DATA_ZERO,
 	TAG_RX_NO_COMMAND,
 	TAG_TX_ERROR,
-	TAG_HUMAN_DISTANCE_OK
+	TAG_HUMAN_DISTANCE_OK,
+	TAG_RESET
 
 }TAG_STATUS_t;
 
 #define TAG_TIMESTAMP_QUERY 0x11
+#define TAG_SET_SLEEP_MODE 0x12
 
 TAG_STATUS_t handle_sniffer_tag(TAG_t *tag);
 TAG_STATUS_t handle_human_tag(TAG_t *tag);

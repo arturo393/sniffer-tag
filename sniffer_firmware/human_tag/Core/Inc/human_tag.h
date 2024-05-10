@@ -40,6 +40,8 @@ typedef struct buffer {
     int delay;
     int rx_timeout;
     int preamble_timeout;
+	uint64_t resp_tx_timestamp;
+	uint64_t poll_rx_timestamp;
 } TX_BUFFER_t;
 
 typedef enum{
@@ -55,6 +57,8 @@ typedef enum{
 
 }TAG_STATUS_t;
 
+#define TAG_TIMESTAMP_QUERY 0x11
+#define TAG_SET_SLEEP_MODE 0x12
 TAG_STATUS_t handle_sniffer_tag(TAG_t *tag);
 TAG_STATUS_t handle_human_tag(TAG_t *tag);
 double calculate_distance_human_tag(uint8_t *rx_buffer, Distance_t *distance);

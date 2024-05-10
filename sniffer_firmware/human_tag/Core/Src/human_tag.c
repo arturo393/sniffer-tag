@@ -23,10 +23,38 @@ TAG_STATUS_t handle_human_tag(TAG_t *tag) {
 	//uart_transmit_string("Receive:");
 	//uart_transmit_hexa_to_text(rx_buffer,rx_buffer_size);
 	uint8_t command = rx_buffer[0];
+	TX_BUFFER_t tx;
 	switch (command) {
-	case 0x11:
+	case TAG_TIMESTAMP_QUERY:
 		// Initialize a TX_BUFFER_t instance
-		TX_BUFFER_t tx;
+		tx.buffer = NULL;
+		tx.buffer_size = 0;
+		tx.delay = RESP_TX_TO_FINAL_RX_DLY_UUS_6M8;
+		tx.rx_timeout = FINAL_RX_TIMEOUT_UUS_6M8;
+		tx.preamble_timeout = PRE_TIMEOUT_6M8;
+
+		tx.buffer_size = create_message_and_alloc_buffer(&tx);
+		//HAL_Delay(1);
+		if (start_transmission_delayed_with_response_expected(tx) == DWT_ERROR) {
+			free(tx.buffer);
+			free(rx_buffer);
+			return (TAG_TX_ERROR);
+		}
+			uart_transmit_string("poll_rx_timestamp: ");
+			uart_transmit_hexa_to_text((uint8_t*)&(tx.poll_rx_timestamp), 4);
+			uart_transmit_int_to_text(tx.poll_rx_timestamp);
+			uart_transmit_string("resp_tx_timestamp: ");
+			uart_transmit_hexa_to_text((uint8_t*)&(tx.resp_tx_timestamp), 4);
+			uart_transmit_int_to_text(tx.resp_tx_timestamp);
+
+		//uart_transmit_string("Sent:");
+		//uart_transmit_hexa_to_text(tx.buffer, tx.buffer_size);
+		free(tx.buffer);
+		free(rx_buffer);
+		break;
+	case TAG_SET_SLEEP_MODE:
+		// Initialize a TX_BUFFER_t instance
+
 		tx.buffer = NULL;
 		tx.buffer_size = 0;
 		tx.delay = RESP_TX_TO_FINAL_RX_DLY_UUS_6M8;
@@ -45,8 +73,8 @@ TAG_STATUS_t handle_human_tag(TAG_t *tag) {
 		//uart_transmit_hexa_to_text(tx.buffer, tx.buffer_size);
 		free(tx.buffer);
 		free(rx_buffer);
+		HAL_Delay(5000);
 		break;
-
 	default:
 		free(rx_buffer);
 		return (TAG_RX_COMMAND_ERROR);
@@ -443,12 +471,8 @@ uint32_t create_message_and_alloc_buffer(TX_BUFFER_t *tx) {
 			(uint32_t) resp_tx_timestamp };
 	memcpy(tx->buffer + 1, timestamps, sizeof(timestamps));
 
-//	uart_transmit_string("poll_rx_timestamp: ");
-//	uart_transmit_hexa_to_text((uint8_t*)&poll_rx_timestamp, 4);
-//	uart_transmit_int_to_text(poll_rx_timestamp);
-//	uart_transmit_string("resp_tx_timestamp: ");
-//	uart_transmit_hexa_to_text((uint8_t*)&resp_tx_timestamp, 4);
-//	uart_transmit_int_to_text(resp_tx_timestamp);
+	tx->poll_rx_timestamp = poll_rx_timestamp;
+	tx->resp_tx_timestamp = resp_tx_timestamp;
 
 	return (tx->buffer_size);
 }

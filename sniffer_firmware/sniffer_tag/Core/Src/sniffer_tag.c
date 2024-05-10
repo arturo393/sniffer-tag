@@ -18,15 +18,21 @@ TAG_STATUS_t handle_sniffer_tag(TAG_t *tag) {
 	tx.preamble_timeout = PRE_TIMEOUT_6M8;
 	// Allocate memory for the buffer
 	tx.buffer = (uint8_t*) malloc(tx.buffer_size);
-	if(tx.buffer == NULL)
+	if (tx.buffer == NULL)
 		Error_Handler();
 
-	tx.buffer[0] = TAG_TIMESTAMP_QUERY;
+	if (tag->detection_times < DISTANCE_READINGS)
+		tx.buffer[0] = TAG_TIMESTAMP_QUERY;
+	else if (tag->detection_times == DISTANCE_READINGS)
+		tx.buffer[0] = TAG_SET_SLEEP_MODE;
 
-	if (start_transmission_inmediate_with_response_expected(tx)== DWT_ERROR){
+	if (start_transmission_inmediate_with_response_expected(tx) == DWT_ERROR) {
 		free(tx.buffer);
 		return (TAG_TX_ERROR);
 	}
+
+	if (tx.buffer[0] == TAG_SET_SLEEP_MODE)
+		return (TAG_RESET);
 //	uart_transmit_string("Sent:");
 //	uart_transmit_hexa_to_text(tx.buffer, tx.buffer_size);
 	free(tx.buffer);
@@ -43,12 +49,14 @@ TAG_STATUS_t handle_sniffer_tag(TAG_t *tag) {
 //	uart_transmit_hexa_to_text(rx_buffer,rx_buffer_size);
 
 	uint8_t command = rx_buffer[0];
-	switch (command){
+	switch (command) {
 	case TAG_TIMESTAMP_QUERY:
 		//send_message_with_timestamps() == TAG_OK)
-		tag->distance.value = calculate_tag_distance(rx_buffer, &(tag->distance));
+		tag->distance.value = calculate_tag_distance(rx_buffer,
+				&(tag->distance));
 		memset(rx_buffer, 0, RX_BUF_LEN);
 		return (TAG_HUMAN_DISTANCE_OK);
+		break;
 	default:
 		return (TAG_RX_NO_COMMAND);
 		break;
@@ -176,35 +184,35 @@ double calculate_distance_human_tag(uint8_t *rx_buffer, Distance_t *distance) {
 }
 
 double calculate_tag_distance(uint8_t *rx_buffer, Distance_t *distance) {
-	uint32_t poll_rx_ts;
-	uint32_t resp_tx_ts;
-	uint64_t poll_tx_ts;
-	uint64_t resp_rx_ts;
-	int32_t rtd_init;
-	uint32_t rtd_resp;
-	float clockOffsetRatio;
-	uint32_t final_tx_time;
+	uint64_t human_tag_rx_timestamp = 0;
+	uint64_t human_tag_tx_timestamp = 0;
+	uint64_t sniffer_tag_tx_timestamp = 0;
+	uint64_t sniffer_tag_rx_timestamp = 0;
+	uint64_t rtd_init = 0;
+	uint64_t rtd_resp = 0;
+	float clockOffsetRatio = 0.0;
+	uint64_t final_tx_time = 0;
 
 	/* Retrieve poll transmission and response reception timestamp. */
-	poll_tx_ts = get_tx_timestamp_u64();
-	resp_rx_ts = get_rx_timestamp_u64();
+	sniffer_tag_tx_timestamp = get_tx_timestamp_u64();
+	sniffer_tag_rx_timestamp = get_rx_timestamp_u64();
 
 	/* Get timestamps embedded in response message. */
-	poll_rx_ts = *(uint32_t*) (rx_buffer + 1);
-	resp_tx_ts = *(uint32_t*) (rx_buffer + 1 + 4);
-//	uart_transmit_string("poll_rx_ts: ");
-//	uart_transmit_hexa_to_text((uint8_t*)&poll_rx_ts, 4);
-//	uart_transmit_int_to_text(poll_rx_ts);
-//	uart_transmit_string("resp_tx_ts: ");
-//	uart_transmit_hexa_to_text((uint8_t*)&resp_tx_ts, 4);
-//	uart_transmit_int_to_text(resp_tx_ts);
+	human_tag_rx_timestamp = *(uint32_t*) (rx_buffer + 1);
+	human_tag_tx_timestamp = *(uint32_t*) (rx_buffer + 1 + 4);
+	uart_transmit_string("poll_rx_ts: ");
+	uart_transmit_hexa_to_text((uint8_t*)&human_tag_rx_timestamp, 4);
+	uart_transmit_int_to_text(human_tag_rx_timestamp);
+	uart_transmit_string("resp_tx_ts: ");
+	uart_transmit_hexa_to_text((uint8_t*)&human_tag_tx_timestamp, 4);
+	uart_transmit_int_to_text(human_tag_tx_timestamp);
 
 	//resp_msg_get_ts(&rx_buffer[FINAL_MSG_POLL_TX_TS_IDX], &poll_rx_ts);
 	//resp_msg_get_ts(&rx_buffer[FINAL_MSG_RESP_RX_TS_IDX], &resp_tx_ts);
 
 	/* Compute time of flight and distance, using clock offset ratio to correct for differing local and remote clock rates */
-	rtd_init = resp_rx_ts - poll_tx_ts;
-	rtd_resp = resp_tx_ts - poll_rx_ts;
+	rtd_init = sniffer_tag_rx_timestamp - sniffer_tag_tx_timestamp;
+	rtd_resp = human_tag_tx_timestamp - human_tag_rx_timestamp;
 
 	/*  Read carrier integrator value and calculate clock offset ratio. See NOTE 11 below. */
 	clockOffsetRatio = ((float) dwt_readclockoffset()) / (uint32_t) (1 << 26);
@@ -212,7 +220,9 @@ double calculate_tag_distance(uint8_t *rx_buffer, Distance_t *distance) {
 	double tof;
 	tof = ((rtd_init - rtd_resp * (1 - clockOffsetRatio)) / 2.0)
 			* DWT_TIME_UNITS;
+
 	distance->value = tof * SPEED_OF_LIGHT;
+
 	//The data were smoothed and filtered
 	distance_moving_average(distance);
 	return (distance->value);
@@ -371,8 +381,7 @@ double distance_moving_average(Distance_t *distance) {
 	return (distance->value);
 }
 
-void uart_transmit_hexa_to_text( uint8_t *message,
-		uint8_t size) {
+void uart_transmit_hexa_to_text(uint8_t *message, uint8_t size) {
 	uint8_t *hexa_text = (uint8_t*) malloc(sizeof(uint8_t) * size);
 	for (int i = 0; i < size; i++) {
 		sprintf((char*) hexa_text, "%02X", message[i]); // Print with leading zeros for 2-digit format
@@ -385,7 +394,7 @@ void uart_transmit_hexa_to_text( uint8_t *message,
 	free(hexa_text);
 }
 
-void uart_transmit_float_to_text( double distanceValue) {
+void uart_transmit_float_to_text(double distanceValue) {
 	/* Calculate the size needed for the formatted string */
 	int size = snprintf(NULL, 0, "%.2f\n\r", distanceValue);
 	size++; // Include space for the null terminator
@@ -494,35 +503,40 @@ int start_transmission_inmediate_with_response_expected(TX_BUFFER_t tx) {
 	return (rets);
 }
 TAG_STATUS_t wait_rx_data() {
-    uint32_t status_reg;
+	uint32_t status_reg;
 
-    /* Wait for CRC check and specified flags */
-    while (!((status_reg = dwt_read32bitreg(SYS_STATUS_ID)) & (SYS_STATUS_RXFCG_BIT_MASK | SYS_STATUS_ALL_RX_TO | SYS_STATUS_ALL_RX_ERR))) {
-    }
+	/* Wait for CRC check and specified flags */
+	while (!((status_reg = dwt_read32bitreg(SYS_STATUS_ID))
+			& (SYS_STATUS_RXFCG_BIT_MASK | SYS_STATUS_ALL_RX_TO
+					| SYS_STATUS_ALL_RX_ERR))) {
+	}
 
-    /* Check for receive errors */
-    if (status_reg & SYS_STATUS_ALL_RX_ERR) {
-        return (TAG_RX_ERROR);
-    }
+	/* Check for receive errors */
+	if (status_reg & SYS_STATUS_ALL_RX_ERR) {
+		dwt_write32bitreg(SYS_STATUS_ID, SYS_STATUS_ALL_RX_ERR);
+		return (TAG_RX_ERROR);
+	}
 
-    /* Check for receive frame timeouts */
-    if (status_reg & SYS_STATUS_RXFTO_BIT_MASK) {
-        return (TAG_RX_FRAME_TIMEOUT);
-    }
+	/* Check for receive frame timeouts */
+	if (status_reg & SYS_STATUS_RXFTO_BIT_MASK) {
+		dwt_write32bitreg(SYS_STATUS_ID, SYS_STATUS_RXFTO_BIT_MASK);
+		return (TAG_RX_FRAME_TIMEOUT);
+	}
 
-    /* Check for receive preamble detection timeouts */
-    if (status_reg & SYS_STATUS_RXPTO_BIT_MASK) {
-        return (TAG_RX_PREAMBLE_DETECTION_TIMEOUT);
-    }
+	/* Check for receive preamble detection timeouts */
+	if (status_reg & SYS_STATUS_RXPTO_BIT_MASK) {
+		dwt_write32bitreg(SYS_STATUS_ID, SYS_STATUS_RXPTO_BIT_MASK);
+		return (TAG_RX_PREAMBLE_DETECTION_TIMEOUT);
+	}
 
-    /* Check for good RX frame event */
-    if (status_reg & SYS_STATUS_RXFCG_BIT_MASK) {
-        /* Clear good RX frame event in the DW IC status register */
-        dwt_write32bitreg(SYS_STATUS_ID, SYS_STATUS_RXFCG_BIT_MASK);
-        return (TAG_RX_CRC_VALID);
-    }
+	/* Check for good RX frame event */
+	if (status_reg & SYS_STATUS_RXFCG_BIT_MASK) {
+		/* Clear good RX frame event in the DW IC status register */
+		dwt_write32bitreg(SYS_STATUS_ID, SYS_STATUS_RXFCG_BIT_MASK);
+		return (TAG_RX_CRC_VALID);
+	}
 
-    return (TAG_NO_RXCG_DETECTED);
+	return (TAG_NO_RXCG_DETECTED);
 }
 
 void uart_transmit_int_to_text(int distanceValue) {
