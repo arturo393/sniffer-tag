@@ -21,18 +21,19 @@ TAG_STATUS_t handle_sniffer_tag(TAG_t *tag) {
 	if (tx.buffer == NULL)
 		Error_Handler();
 
-	if (tag->detection_times < DISTANCE_READINGS)
+	if (tag->detection_times < DISTANCE_READINGS) {
 		tx.buffer[0] = TAG_TIMESTAMP_QUERY;
-	else if (tag->detection_times == DISTANCE_READINGS)
-		tx.buffer[0] = TAG_SET_SLEEP_MODE;
+		if (tag->detection_times == DISTANCE_READINGS-1)
+			tx.buffer[0] = TAG_SET_SLEEP_MODE;
+	} else {
+		tag->detection_times = 0;
+		return (TAG_TX_ERROR);
+	}
 
 	if (start_transmission_inmediate_with_response_expected(tx) == DWT_ERROR) {
 		free(tx.buffer);
 		return (TAG_TX_ERROR);
 	}
-
-	if (tx.buffer[0] == TAG_SET_SLEEP_MODE)
-		return (TAG_RESET);
 //	uart_transmit_string("Sent:");
 //	uart_transmit_hexa_to_text(tx.buffer, tx.buffer_size);
 	free(tx.buffer);
@@ -42,9 +43,9 @@ TAG_STATUS_t handle_sniffer_tag(TAG_t *tag) {
 	if (status_reg != TAG_RX_CRC_VALID)
 		return (status_reg);
 
-	uint8_t rx_buffer[RX_BUF_LEN] = { 0 };
-
-	uint8_t rx_buffer_size = read_human_tag_first_message(rx_buffer);
+	uint8_t *rx_buffer;
+	uint32_t rx_buffer_size = 0;
+	rx_buffer_size = allocate_and_read_received_frame(&rx_buffer);
 //	uart_transmit_string("Receive:");
 //	uart_transmit_hexa_to_text(rx_buffer,rx_buffer_size);
 
@@ -52,15 +53,29 @@ TAG_STATUS_t handle_sniffer_tag(TAG_t *tag) {
 	switch (command) {
 	case TAG_TIMESTAMP_QUERY:
 		//send_message_with_timestamps() == TAG_OK)
+		tag->id = *(uint32_t*) (rx_buffer + 1);
 		tag->distance.value = calculate_tag_distance(rx_buffer,
 				&(tag->distance));
-		memset(rx_buffer, 0, RX_BUF_LEN);
+
+		tag->poll_rx_timestamp = *(uint32_t*) (rx_buffer + 1 + 4);
+		tag->resp_tx_timestamp = *(uint32_t*) (rx_buffer + 1 + 4 + 4);
+
+		free(rx_buffer);
 		return (TAG_HUMAN_DISTANCE_OK);
 		break;
+	case TAG_SET_SLEEP_MODE:
+		//send_message_with_timestamps() == TAG_OK)
+		tag->id = *(uint32_t*) (rx_buffer + 1);
+		tag->distance.value = calculate_tag_distance(rx_buffer,
+				&(tag->distance));
+		free(rx_buffer);
+		return (TAG_RESET);
 	default:
 		return (TAG_RX_NO_COMMAND);
+		free(rx_buffer);
 		break;
 	}
+	free(rx_buffer);
 	return (TAG_OK);
 }
 
@@ -94,8 +109,8 @@ TAG_STATUS_t handle_human_tag(TAG_t *tag) {
 	if (rx_buffer_size == 0)
 		return (2);
 
-	//uart_transmit_string("Human Tag send: ");
-	//uart_transmit_hexa_to_text(&huart1,rx_buffer,rx_buffer_size);
+//uart_transmit_string("Human Tag send: ");
+//uart_transmit_hexa_to_text(&huart1,rx_buffer,rx_buffer_size);
 	int ret = send_message_with_human_tag_timestamp();
 
 	/* If dwt_starttx() returns an error, abandon this ranging exchange and proceed to the next one. See NOTE 11 below. */
@@ -198,17 +213,17 @@ double calculate_tag_distance(uint8_t *rx_buffer, Distance_t *distance) {
 	sniffer_tag_rx_timestamp = get_rx_timestamp_u64();
 
 	/* Get timestamps embedded in response message. */
-	human_tag_rx_timestamp = *(uint32_t*) (rx_buffer + 1);
-	human_tag_tx_timestamp = *(uint32_t*) (rx_buffer + 1 + 4);
-	uart_transmit_string("poll_rx_ts: ");
-	uart_transmit_hexa_to_text((uint8_t*)&human_tag_rx_timestamp, 4);
-	uart_transmit_int_to_text(human_tag_rx_timestamp);
-	uart_transmit_string("resp_tx_ts: ");
-	uart_transmit_hexa_to_text((uint8_t*)&human_tag_tx_timestamp, 4);
-	uart_transmit_int_to_text(human_tag_tx_timestamp);
+	human_tag_rx_timestamp = *(uint32_t*) (rx_buffer + 1 + 4);
+	human_tag_tx_timestamp = *(uint32_t*) (rx_buffer + 1 + 4 + 4);
+//uart_transmit_string("poll_rx_ts: ");
+//uart_transmit_hexa_to_text((uint8_t*)&human_tag_rx_timestamp, 4);
+//uart_transmit_int_to_text(human_tag_rx_timestamp);
+//uart_transmit_string("resp_tx_ts: ");
+//uart_transmit_hexa_to_text((uint8_t*)&human_tag_tx_timestamp, 4);
+//uart_transmit_int_to_text(human_tag_tx_timestamp);
 
-	//resp_msg_get_ts(&rx_buffer[FINAL_MSG_POLL_TX_TS_IDX], &poll_rx_ts);
-	//resp_msg_get_ts(&rx_buffer[FINAL_MSG_RESP_RX_TS_IDX], &resp_tx_ts);
+//resp_msg_get_ts(&rx_buffer[FINAL_MSG_POLL_TX_TS_IDX], &poll_rx_ts);
+//resp_msg_get_ts(&rx_buffer[FINAL_MSG_RESP_RX_TS_IDX], &resp_tx_ts);
 
 	/* Compute time of flight and distance, using clock offset ratio to correct for differing local and remote clock rates */
 	rtd_init = sniffer_tag_rx_timestamp - sniffer_tag_tx_timestamp;
@@ -223,7 +238,7 @@ double calculate_tag_distance(uint8_t *rx_buffer, Distance_t *distance) {
 
 	distance->value = tof * SPEED_OF_LIGHT;
 
-	//The data were smoothed and filtered
+//The data were smoothed and filtered
 	distance_moving_average(distance);
 	return (distance->value);
 }
@@ -252,7 +267,7 @@ TAG_STATUS_t send_message_with_timestamps() {
 
 	uint32_t timestamps[3] = { poll_tx_timestamp, resp_rx_timestamp,
 			final_tx_timestamp };
-	// Copy timestamps to final message using memcpy
+// Copy timestamps to final message using memcpy
 	memcpy(tx_final_msg + 1, timestamps, sizeof(timestamps));
 
 	/* Write and send final message. See NOTE 9 below. */
@@ -330,18 +345,32 @@ uint32_t send_response_with_timestamps(uint8_t *tx_resp_msg, uint8_t size,
 	return (status_reg);
 }
 
-uint8_t read_human_tag_first_message(uint8_t *rx_buffer) {
+uint32_t allocate_and_read_received_frame(uint8_t **rx_buffer) {
+	uint32_t rx_buffer_size = 0;
 
-	uint32_t frame_len = 0;
+	/* Read the frame information and extract the frame length. */
+	rx_buffer_size = dwt_read32bitreg(RX_FINFO_ID) & FRAME_LEN_MAX_EX;
 
-	/* A frame has been received, read it into the local buffer. */
-	frame_len =
-	dwt_read32bitreg(RX_FINFO_ID) & FRAME_LEN_MAX_EX;
-	if (frame_len <= RX_BUF_LEN)
-		dwt_readrxdata(rx_buffer, (uint16_t) frame_len, 0);
+	/* Check if the frame length is non-zero. */
+	if (rx_buffer_size > 0) {
+		/* Allocate memory dynamically for the buffer. */
+		*rx_buffer = (uint8_t*) malloc(rx_buffer_size * sizeof(uint8_t));
 
-	return (frame_len);
+		if (*rx_buffer != NULL) {
+			/* Read the received data into the dynamically allocated buffer. */
+			dwt_readrxdata(*rx_buffer, (uint16_t) rx_buffer_size, 0);
 
+			/* Add any additional processing here if needed. */
+
+			return rx_buffer_size;
+		} else {
+			/* Memory allocation failed. */
+			return 0; // Return 0 to indicate failure
+		}
+	}
+
+	/* No data received, return 0. */
+	return 0;
 }
 
 double distance_moving_average(Distance_t *distance) {
@@ -420,21 +449,21 @@ void uart_transmit_float_to_text(double distanceValue) {
 int uart_transmit_string(char *message) {
 	uint16_t message_size = strlen(message) + 1; // Include space for the null terminator
 
-	// Dynamically allocate memory for the message
+// Dynamically allocate memory for the message
 	char *dynamic_message = (char*) malloc(message_size * sizeof(char));
 	if (dynamic_message == NULL) {
 		// Handle allocation failure
 		return -1; // Return an error code
 	}
 
-	// Copy the message to the dynamically allocated memory
+// Copy the message to the dynamically allocated memory
 	strcpy(dynamic_message, message);
 
-	// Transmit the dynamic message
+// Transmit the dynamic message
 	HAL_UART_Transmit(&huart1, (uint8_t*) dynamic_message, message_size,
 	HAL_MAX_DELAY);
 
-	// Free the dynamically allocated memory
+// Free the dynamically allocated memory
 	free(dynamic_message);
 
 	return (2);
@@ -502,39 +531,42 @@ int start_transmission_inmediate_with_response_expected(TX_BUFFER_t tx) {
 
 	return (rets);
 }
+#define RX_TIMEOUT_MS 1000 // Timeout value in milliseconds
+
 TAG_STATUS_t wait_rx_data() {
 	uint32_t status_reg;
+	uint32_t start_time = HAL_GetTick(); // Get the current time in milliseconds
 
-	/* Wait for CRC check and specified flags */
-	while (!((status_reg = dwt_read32bitreg(SYS_STATUS_ID))
-			& (SYS_STATUS_RXFCG_BIT_MASK | SYS_STATUS_ALL_RX_TO
-					| SYS_STATUS_ALL_RX_ERR))) {
-	}
+	while ((HAL_GetTick() - start_time) < RX_TIMEOUT_MS) {
+		status_reg = dwt_read32bitreg(SYS_STATUS_ID);
 
-	/* Check for receive errors */
-	if (status_reg & SYS_STATUS_ALL_RX_ERR) {
-		dwt_write32bitreg(SYS_STATUS_ID, SYS_STATUS_ALL_RX_ERR);
-		return (TAG_RX_ERROR);
-	}
+		/* Check for receive errors */
+		if (status_reg & SYS_STATUS_ALL_RX_ERR) {
+			dwt_write32bitreg(SYS_STATUS_ID, SYS_STATUS_ALL_RX_ERR);
+			return (TAG_RX_ERROR);
+		}
 
-	/* Check for receive frame timeouts */
-	if (status_reg & SYS_STATUS_RXFTO_BIT_MASK) {
-		dwt_write32bitreg(SYS_STATUS_ID, SYS_STATUS_RXFTO_BIT_MASK);
-		return (TAG_RX_FRAME_TIMEOUT);
-	}
+		/* Check for receive frame timeouts */
+		if (status_reg & SYS_STATUS_RXFTO_BIT_MASK) {
+			dwt_write32bitreg(SYS_STATUS_ID, SYS_STATUS_RXFTO_BIT_MASK);
+			return (TAG_RX_FRAME_TIMEOUT);
+		}
 
-	/* Check for receive preamble detection timeouts */
-	if (status_reg & SYS_STATUS_RXPTO_BIT_MASK) {
-		dwt_write32bitreg(SYS_STATUS_ID, SYS_STATUS_RXPTO_BIT_MASK);
-		return (TAG_RX_PREAMBLE_DETECTION_TIMEOUT);
-	}
+		/* Check for receive preamble detection timeouts */
+		if (status_reg & SYS_STATUS_RXPTO_BIT_MASK) {
+			dwt_write32bitreg(SYS_STATUS_ID, SYS_STATUS_RXPTO_BIT_MASK);
+			return (TAG_RX_PREAMBLE_DETECTION_TIMEOUT);
+		}
 
-	/* Check for good RX frame event */
-	if (status_reg & SYS_STATUS_RXFCG_BIT_MASK) {
-		/* Clear good RX frame event in the DW IC status register */
-		dwt_write32bitreg(SYS_STATUS_ID, SYS_STATUS_RXFCG_BIT_MASK);
-		return (TAG_RX_CRC_VALID);
+		/* Check for good RX frame event */
+		if (status_reg & SYS_STATUS_RXFCG_BIT_MASK) {
+			/* Clear good RX frame event in the DW IC status register */
+			dwt_write32bitreg(SYS_STATUS_ID, SYS_STATUS_RXFCG_BIT_MASK);
+			return (TAG_RX_CRC_VALID);
+		}
 	}
+	dwt_write32bitreg(SYS_STATUS_ID,
+			SYS_STATUS_ALL_RX_TO | SYS_STATUS_ALL_RX_ERR | SYS_STATUS_TXFRS_BIT_MASK);
 
 	return (TAG_NO_RXCG_DETECTED);
 }

@@ -241,3 +241,5 @@ sniffer_firmware/sniffer_tag/Debug/Core/Startup/startup_stm32f103c8tx.d
 sniffer_firmware/sniffer_tag/Debug/Core/Startup/startup_stm32f103c8tx.o
 sniffer_firmware/sniffer_tag/Debug/Core/Startup/subdir.mk
 sniffer_firmware/sniffer_tag/Debug/Drivers/STM32F1xx_HAL_Driver/Src/stm32f1xx_hal_cortex.d
+sniffer_firmware/human_tag/Debug/human_tag.list
+sniffer_firmware/human_tag/Debug/human_tag.map

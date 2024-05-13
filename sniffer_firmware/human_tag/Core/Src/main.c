@@ -148,7 +148,7 @@ int main(void) {
 	0x0 /*PG count*/
 	};
 
-	uint8_t dist_str[30];
+	char dist_str[200];
 	int size;
 	hw = malloc(sizeof(SPI_HW_t));
 	if (hw == NULL)
@@ -159,7 +159,7 @@ int main(void) {
 	hw->nssPin = SPI2_CS_Pin;
 	hw->nssPort = SPI2_CS_GPIO_Port;
 	size = sprintf((char*) dist_str, "\n\rDEV_UWB3000F00 init\n\r");
-	HAL_UART_Transmit(&huart1, dist_str, (uint16_t) size,
+	HAL_UART_Transmit(&huart1, (uint8_t*) dist_str, (uint16_t) size,
 	HAL_MAX_DELAY);
 
 	HAL_GPIO_WritePin(hw->nrstPort, hw->nrstPin, GPIO_PIN_RESET);/* Target specific drive of RSTn line into DW IC low for a period. */
@@ -187,13 +187,13 @@ int main(void) {
 	/* USER CODE END 2 */
 
 	/* Infinite loop */
+	tag->id = _dwt_otpread(PARTID_ADDRESS);
 	/* USER CODE BEGIN WHILE */
 	while (1) {
 
 		tag_status = handle_human_tag(tag);
 		switch (tag_status) {
 		case TAG_NO_RXCG_DETECTED:
-
 			break;
 
 		case TAG_RX_TIMEOUT:
@@ -203,10 +203,25 @@ int main(void) {
 			uart_transmit_string("TAG_TX_ERROR");
 			break;
 		case TAG_OK:
-			uart_transmit_string("TAG_OK\n\r");
-			uart_transmit_int_to_text(tag->distance.counter++);
+			/* Calculate the size needed for the formatted string */
+			// Using sprintf to format the string into the buffer
+			int size =
+					sprintf(dist_str,
+							"{ID: %lu} , {times: %lu} , {poll_rx_timestamp: %lu} , {resp_tx_timestamp: %lu} \n\r",
+							(unsigned long) tag->id,
+							(unsigned long) tag->detection_times,
+							(unsigned long) tag->poll_rx_timestamp,
+							(unsigned long) tag->resp_tx_timestamp);
+			/* Transmit the formatted string */
+			HAL_UART_Transmit(&huart1, (uint8_t*) dist_str, (uint16_t) size,
+			HAL_MAX_DELAY);
+			tag->detection_times++;
 			break;
 
+		case TAG_SLEEP:
+			tag->detection_times = 0;
+			HAL_Delay(5000);
+			break;
 		default:
 			break;
 

@@ -32,6 +32,8 @@ typedef struct {
 	uint32_t id;
 	int detection_times;
 	Distance_t distance;
+	uint32_t resp_tx_timestamp;
+	uint32_t poll_rx_timestamp;
 } TAG_t;
 
 typedef struct buffer {
@@ -40,6 +42,8 @@ typedef struct buffer {
     int delay;
     int rx_timeout;
     int preamble_timeout;
+	uint32_t resp_tx_timestamp;
+	uint32_t poll_rx_timestamp;
 } TX_BUFFER_t;
 
 
@@ -69,7 +73,7 @@ double calculate_tag_distance(uint8_t *rx_buffer, Distance_t *distance);
 TAG_STATUS_t send_message_with_timestamps();
 uint32_t send_response_with_timestamps(uint8_t *tx_resp_msg, uint8_t size,
 		uint32_t frame_seq_nb);
-uint8_t read_human_tag_first_message(uint8_t *rx_buffer);
+uint32_t allocate_and_read_received_frame(uint8_t **rx_buffer);
 double distance_moving_average(Distance_t *distance);
 void uart_transmit_hexa_to_text( uint8_t *message,
 		uint8_t size);

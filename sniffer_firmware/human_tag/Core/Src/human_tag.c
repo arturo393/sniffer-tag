@@ -40,17 +40,14 @@ TAG_STATUS_t handle_human_tag(TAG_t *tag) {
 			free(rx_buffer);
 			return (TAG_TX_ERROR);
 		}
-			uart_transmit_string("poll_rx_timestamp: ");
-			uart_transmit_hexa_to_text((uint8_t*)&(tx.poll_rx_timestamp), 4);
-			uart_transmit_int_to_text(tx.poll_rx_timestamp);
-			uart_transmit_string("resp_tx_timestamp: ");
-			uart_transmit_hexa_to_text((uint8_t*)&(tx.resp_tx_timestamp), 4);
-			uart_transmit_int_to_text(tx.resp_tx_timestamp);
 
 		//uart_transmit_string("Sent:");
 		//uart_transmit_hexa_to_text(tx.buffer, tx.buffer_size);
+		tag->resp_tx_timestamp = (uint32_t) tx.resp_tx_timestamp;
+		tag->poll_rx_timestamp = (uint32_t) tx.poll_rx_timestamp;
 		free(tx.buffer);
 		free(rx_buffer);
+		return (TAG_OK);
 		break;
 	case TAG_SET_SLEEP_MODE:
 		// Initialize a TX_BUFFER_t instance
@@ -71,47 +68,16 @@ TAG_STATUS_t handle_human_tag(TAG_t *tag) {
 
 		//uart_transmit_string("Sent:");
 		//uart_transmit_hexa_to_text(tx.buffer, tx.buffer_size);
+
 		free(tx.buffer);
 		free(rx_buffer);
-		HAL_Delay(5000);
+		return (TAG_SLEEP);
 		break;
 	default:
 		free(rx_buffer);
 		return (TAG_RX_COMMAND_ERROR);
 	}
-	//uart_transmit_string("Human Tag send: ");
-	//uart_transmit_hexa_to_text(&huart1,rx_buffer,rx_buffer_size);
 
-	/* Poll for reception of expected "final" frame or error/timeout. See NOTE 8 below. */
-	//while (!((status_reg = dwt_read32bitreg(SYS_STATUS_ID))
-	//		& (SYS_STATUS_RXFCG_BIT_MASK | SYS_STATUS_ALL_RX_TO
-	//				| SYS_STATUS_ALL_RX_ERR))) {
-	//};
-	/* Increment frame sequence number after transmission of the response message (modulo 256). */
-	//if (!(status_reg & SYS_STATUS_RXFCG_BIT_MASK)) {
-	/* Clear RX error/timeout events in the DW IC status register. */
-	//	dwt_write32bitreg(SYS_STATUS_ID,
-	//			SYS_STATUS_ALL_RX_TO | SYS_STATUS_ALL_RX_ERR);
-	//	return (3);
-	//}
-	/* Clear good RX frame event and TX frame sent in the DW IC status register. */
-	//dwt_write32bitreg(SYS_STATUS_ID,
-	//		SYS_STATUS_RXFCG_BIT_MASK | SYS_STATUS_TXFRS_BIT_MASK);
-	/* A frame has been received, read it into the local buffer. */
-	//uint32_t frame_len = dwt_read32bitreg(
-	//		RX_FINFO_ID) & FRAME_LEN_MAX_EX;
-	//if (frame_len <= RX_BUF_LEN) {
-	//	dwt_readrxdata(rx_buffer, (uint16_t) frame_len, 0);
-	//}
-	/* Check that the frame is a final message sent by "DS TWR initiator" example.
-	 * As the sequence number field of the frame is not used in this example, it can be zeroed to ease the validation of the frame. */
-	//rx_buffer[ALL_MSG_SN_IDX] = 0;
-	//uint8_t rx_final_msg[] = { 0x11, 0x00, 0x00, 0x00, 0x00 };
-	//if (memcmp(rx_buffer, rx_final_msg,
-	//INITIAL_COMUNICATION_DATA_SIZE) != 0) {
-	//	return (4);
-	//}
-	//calculate_distance_human_tag(rx_buffer, &(tag->distance));
 	return (TAG_OK);
 }
 
@@ -440,36 +406,45 @@ int uart_transmit_string(char *message) {
 }
 
 uint32_t create_message_and_alloc_buffer(TX_BUFFER_t *tx) {
-	uint32_t resp_tx_time;
-	uint64_t resp_tx_timestamp;
-	uint64_t poll_rx_timestamp;
+	uint32_t resp_tx_time = 0;
+	uint64_t resp_tx_timestamp = 0;
+	uint64_t poll_rx_timestamp = 0;
 
 	/** Retrieve poll reception timestamp */
 	poll_rx_timestamp = get_rx_timestamp_u64();
 
 	/** Set send time for response */
 	resp_tx_time = (uint32_t) ((poll_rx_timestamp
-			+ ((POLL_RX_TO_RESP_TX_DLY_UUS_6M8) * UUS_TO_DWT_TIME)) >> 8);
+			+ ((POLL_RX_TO_RESP_TX_DLY_UUS_6M8) * UUS_TO_DWT_TIME))
+			>> RESPONSE_TX_TIME_SHIFT_AMOUNT);
 	dwt_setdelayedtrxtime(resp_tx_time);
 
 	/** Calculate the response TX timestamp */
-	resp_tx_timestamp = (((uint64_t) (resp_tx_time & 0xFFFFFFFEUL)) << 8)
-			+ TX_ANT_DLY_LP;
-
+	resp_tx_timestamp =
+			(((uint64_t) (resp_tx_time & RESPONSE_TX_TIME_MASK_VALUE))
+					<< RESPONSE_TX_TIME_SHIFT_AMOUNT) + TX_ANT_DLY_LP;
 	/** Calculate the size needed for the response message buffer */
-	tx->buffer_size = sizeof(uint8_t) + 2 * sizeof(uint32_t);
+	tx->buffer_size = sizeof(uint8_t) + 3 * sizeof(uint32_t);
 
 	/** Allocate memory for the response message buffer */
 	tx->buffer = (uint8_t*) malloc(tx->buffer_size);
 	if (tx->buffer == NULL) {
 		/** Handle memory allocation failure */
-		return 0;
+		return (0);
 	}
-	memset(tx->buffer, 0, tx->buffer_size);
-	tx->buffer[0] = 0x11;
-	uint32_t timestamps[2] = { (uint32_t) poll_rx_timestamp,
-			(uint32_t) resp_tx_timestamp };
-	memcpy(tx->buffer + 1, timestamps, sizeof(timestamps));
+
+	// Set the first byte of the buffer to TAG_TIMESTAMP_QUERY
+	tx->buffer[0] = TAG_TIMESTAMP_QUERY;
+
+	// Write tag_id to the buffer starting from the second byte
+	*(uint32_t*) (tx->buffer + 1) = _dwt_otpread(PARTID_ADDRESS);
+
+	// Write poll_rx_timestamp to the buffer
+	*(uint32_t*) (tx->buffer + 1 + sizeof(uint32_t)) = poll_rx_timestamp;
+
+	// Write resp_tx_timestamp to the buffer
+	*(uint32_t*) (tx->buffer + 1 + sizeof(uint32_t) + sizeof(uint32_t)) =
+			resp_tx_timestamp;
 
 	tx->poll_rx_timestamp = poll_rx_timestamp;
 	tx->resp_tx_timestamp = resp_tx_timestamp;
@@ -480,9 +455,9 @@ uint32_t create_message_and_alloc_buffer(TX_BUFFER_t *tx) {
 void start_tag_reception_inmediate(uint8_t preamble_timeout, uint8_t rx_timeout) {
 
 	/* Loop forever responding to ranging requests. */
-	dwt_setpreambledetecttimeout(0);
+	dwt_setpreambledetecttimeout(preamble_timeout);
 	/* Clear reception timeout to start next ranging process. */
-	dwt_setrxtimeout(0);
+	dwt_setrxtimeout(rx_timeout);
 	/* Activate reception immediately. */
 	dwt_rxenable(DWT_START_RX_IMMEDIATE);
 	/* Poll for reception of a frame or error/timeout. See NOTE 8 below. */
@@ -496,13 +471,15 @@ TAG_STATUS_t wait_rx_data() {
 					| SYS_STATUS_ALL_RX_ERR))) {
 	};
 	/* check for any receive error*/
-//	if (!(status_reg & SYS_STATUS_ALL_RX_ERR)) {
-//		return (TAG_RX_ERROR);
-//	}
+	if ((status_reg & SYS_STATUS_ALL_RX_ERR)) {
+		dwt_write32bitreg(SYS_STATUS_ID, SYS_STATUS_ALL_RX_ERR);
+		return (TAG_RX_ERROR);
+	}
 	/* check for receive timeouts */
-//	if (!(status_reg & SYS_STATUS_ALL_RX_TO)) {
-//		return (TAG_RX_TIMEOUT);
-//	}
+	if ((status_reg & SYS_STATUS_ALL_RX_TO)) {
+		dwt_write32bitreg(SYS_STATUS_ID, SYS_STATUS_ALL_RX_TO);
+		return (TAG_RX_TIMEOUT);
+	}
 	if ((status_reg & SYS_STATUS_RXFCG_BIT_MASK)) {
 		/* Clear RX error/timeout events in the DW IC status register. */
 		dwt_write32bitreg(SYS_STATUS_ID,

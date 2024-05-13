@@ -392,12 +392,6 @@ uint32_t dwt_otp_read(uint16_t address) {
 const uint16_t sts_length_factors[STS_LEN_SUPPORTED] = { 1024, 1448, 2048, 2896,
 		4096, 5793, 8192 };
 
-// -------------------------------------------------------------------------------------------------------------------
-// Internal functions prototypes for controlling and configuring the device
-//
-static void dwt_force_clocks(int clocks);
-static uint32_t _dwt_otpread(uint16_t address);      // Read non-volatile memory
-static void _dwt_otpprogword32(uint32_t data, uint16_t address); // Program the non-volatile memory
 
 /*! ------------------------------------------------------------------------------------------------------------------
  * @brief  this function is used to read/write to the DW3000 device registers
@@ -3802,7 +3796,7 @@ void dwt_setleds(uint8_t mode) {
  *
  * no return value
  */
-static
+
 void dwt_force_clocks(int clocks) {
 
 	if (clocks == FORCE_CLK_SYS_TX) {

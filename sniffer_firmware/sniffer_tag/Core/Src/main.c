@@ -138,7 +138,7 @@ int main(void) {
 	0x0 /*PG count*/
 	};
 
-	uint8_t dist_str[30];
+	char dist_str[100];
 	int size;
 	hw = malloc(sizeof(SPI_HW_t));
 	if (hw == NULL)
@@ -150,7 +150,7 @@ int main(void) {
 	hw->nssPin = SPI1_CS_Pin;
 	hw->nssPort = SPI1_CS_GPIO_Port;
 	size = sprintf((char*) dist_str, "\n\rDEV_UWB3000F27 init\n\r");
-	HAL_UART_Transmit(&huart1, dist_str, (uint16_t) size,
+	HAL_UART_Transmit(&huart1, (uint8_t*) dist_str, (uint16_t) size,
 	HAL_MAX_DELAY);
 
 	HAL_GPIO_WritePin(hw->nrstPort, hw->nrstPin, GPIO_PIN_RESET);/* Target specific drive of RSTn line into DW IC low for a period. */
@@ -200,6 +200,8 @@ int main(void) {
 			break;
 		case TAG_RX_PREAMBLE_DETECTION_TIMEOUT:
 			uart_transmit_string("TAG_RX_PREAMBLE_DETECTION_TIMEOUT\r");
+			dwt_write32bitreg(SYS_STATUS_ID,
+					SYS_STATUS_ALL_RX_TO | SYS_STATUS_ALL_RX_ERR | SYS_STATUS_TXFRS_BIT_MASK);
 			// Handle the case when there is a RX timeout
 			break;
 		case TAG_RX_CRC_VALID:
@@ -231,10 +233,27 @@ int main(void) {
 			}
 			break;
 		case TAG_HUMAN_DISTANCE_OK:
-			uart_transmit_string("times: ");
-			uart_transmit_int_to_text(tag->detection_times++);
-			uart_transmit_string("distance: ");
-			uart_transmit_float_to_text(tag->distance.value);
+			tag->detection_times++;
+			if (tag->detection_times == DISTANCE_READINGS) {
+				tag->detection_times = 0;
+			}
+
+			/* Calculate the size needed for the formatted string */
+			size =
+					sprintf(dist_str,
+							"{ID: %lu} , {times: %lu} , {poll_rx_timestamp: %lu} , {resp_tx_timestamp: %lu} , {distance: %.2f}\r",
+							(unsigned long) tag->id,
+							(unsigned long) tag->detection_times,
+							(unsigned long) tag->poll_rx_timestamp,
+							(unsigned long) tag->resp_tx_timestamp,
+							tag->distance.value);
+			size++; // Include space for the null terminator
+
+			/* Transmit the formatted string */
+			HAL_UART_Transmit(&huart1, (uint8_t*) dist_str, (uint16_t) size,
+			HAL_MAX_DELAY);
+
+
 			break;
 		case TAG_RX_NO_COMMAND:
 			uart_transmit_string("TAG_RX_NO_COMMAND\n\r");

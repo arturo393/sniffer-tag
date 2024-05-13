@@ -10,13 +10,15 @@
 
 #include "main.h"
 #include "stdlib.h"
+#include "stdio.h"
 #include "uwb3000Fxx.h"
 
 extern UART_HandleTypeDef huart1;
 
 /* Length of the common part of the message (up to and including the function code, see NOTE 2 below). */
 #define INITIAL_COMUNICATION_DATA_SIZE 5
-
+#define RESPONSE_TX_TIME_MASK_VALUE 0xFFFFFFFEUL
+#define RESPONSE_TX_TIME_SHIFT_AMOUNT 8
 typedef struct {
 	double tof;
 	double value;
@@ -32,6 +34,8 @@ typedef struct {
 	uint32_t id;
 	uint64_t detection_times;
 	Distance_t distance;
+	uint32_t resp_tx_timestamp;
+	uint32_t poll_rx_timestamp;
 } TAG_t;
 
 typedef struct buffer {
@@ -54,6 +58,7 @@ typedef enum{
 	TAG_RX_DATA_ZERO,
 	TAG_RX_COMMAND_ERROR,
 	TAG_TX_ERROR,
+	TAG_SLEEP,
 
 }TAG_STATUS_t;
 
