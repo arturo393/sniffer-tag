@@ -32,7 +32,8 @@ typedef struct {
 
 typedef struct {
 	uint32_t id;
-	uint64_t detection_times;
+	uint64_t readings;
+	uint8_t command;
 	Distance_t distance;
 	uint32_t resp_tx_timestamp;
 	uint32_t poll_rx_timestamp;
@@ -81,7 +82,8 @@ int uart_transmit_string(char *message);
 void start_tag_reception_inmediate(uint8_t preamble_timeout,uint8_t rx_timeout);
 TAG_STATUS_t wait_rx_data();
 uint32_t allocate_and_read_received_frame(uint8_t **rx_buffer);
-uint32_t create_message_and_alloc_buffer(TX_BUFFER_t *tx);
+uint32_t create_message_and_alloc_buffer(TX_BUFFER_t *tx,uint8_t command);
 int start_transmission_delayed_with_response_expected(TX_BUFFER_t tx);
+void debug(TAG_t *tag);
 #endif /* INC_HUMAN_TAG_H_ */
 

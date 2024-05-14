@@ -13,6 +13,9 @@
 #include "uwb3000Fxx.h"
 
 extern UART_HandleTypeDef huart1;
+extern SPI_HW_t *hw_a;
+extern SPI_HW_t *hw_b;
+extern SPI_HW_t *hw;
 
 /* Length of the common part of the message (up to and including the function code, see NOTE 2 below). */
 #define INITIAL_COMUNICATION_DATA_SIZE 5
@@ -30,8 +33,11 @@ typedef struct {
 
 typedef struct {
 	uint32_t id;
-	int detection_times;
-	Distance_t distance;
+	int readings;
+	uint8_t command;
+	Distance_t *distance;
+	Distance_t distance_a;
+	Distance_t distance_b;
 	uint32_t resp_tx_timestamp;
 	uint32_t poll_rx_timestamp;
 } TAG_t;
@@ -65,7 +71,8 @@ typedef enum{
 
 #define TAG_TIMESTAMP_QUERY 0x11
 #define TAG_SET_SLEEP_MODE 0x12
-
+TAG_t *create_TAG();
+void reset_TAG_values(TAG_t *tag);
 TAG_STATUS_t handle_sniffer_tag(TAG_t *tag);
 TAG_STATUS_t handle_human_tag(TAG_t *tag);
 double calculate_distance_human_tag(uint8_t *rx_buffer, Distance_t *distance);
@@ -82,5 +89,7 @@ int uart_transmit_string(char *message);
 void uart_transmit_int_to_text(int distanceValue);
 int start_transmission_inmediate_with_response_expected(TX_BUFFER_t tx);
 TAG_STATUS_t wait_rx_data();
+void debug(TAG_t *tag);
+double distance_smooth(Distance_t *distance);
 #endif /* INC_SNIFFER_TAG_H_ */
 

@@ -20,11 +20,9 @@ TAG_STATUS_t handle_human_tag(TAG_t *tag) {
 	rx_buffer_size = allocate_and_read_received_frame(&rx_buffer);
 	if (rx_buffer_size == 0)
 		return (TAG_RX_DATA_ZERO);
-	//uart_transmit_string("Receive:");
-	//uart_transmit_hexa_to_text(rx_buffer,rx_buffer_size);
-	uint8_t command = rx_buffer[0];
+	tag->command = rx_buffer[0];
 	TX_BUFFER_t tx;
-	switch (command) {
+	switch (tag->command) {
 	case TAG_TIMESTAMP_QUERY:
 		// Initialize a TX_BUFFER_t instance
 		tx.buffer = NULL;
@@ -32,42 +30,33 @@ TAG_STATUS_t handle_human_tag(TAG_t *tag) {
 		tx.delay = RESP_TX_TO_FINAL_RX_DLY_UUS_6M8;
 		tx.rx_timeout = FINAL_RX_TIMEOUT_UUS_6M8;
 		tx.preamble_timeout = PRE_TIMEOUT_6M8;
+		tx.buffer_size = create_message_and_alloc_buffer(&tx,tag->command);
 
-		tx.buffer_size = create_message_and_alloc_buffer(&tx);
-		//HAL_Delay(1);
 		if (start_transmission_delayed_with_response_expected(tx) == DWT_ERROR) {
 			free(tx.buffer);
 			free(rx_buffer);
 			return (TAG_TX_ERROR);
 		}
 
-		//uart_transmit_string("Sent:");
-		//uart_transmit_hexa_to_text(tx.buffer, tx.buffer_size);
 		tag->resp_tx_timestamp = (uint32_t) tx.resp_tx_timestamp;
 		tag->poll_rx_timestamp = (uint32_t) tx.poll_rx_timestamp;
 		free(tx.buffer);
 		free(rx_buffer);
 		return (TAG_OK);
 		break;
-	case TAG_SET_SLEEP_MODE:
-		// Initialize a TX_BUFFER_t instance
 
+	case TAG_SET_SLEEP_MODE:
 		tx.buffer = NULL;
 		tx.buffer_size = 0;
 		tx.delay = RESP_TX_TO_FINAL_RX_DLY_UUS_6M8;
 		tx.rx_timeout = FINAL_RX_TIMEOUT_UUS_6M8;
 		tx.preamble_timeout = PRE_TIMEOUT_6M8;
-
-		tx.buffer_size = create_message_and_alloc_buffer(&tx);
-		//HAL_Delay(1);
+		tx.buffer_size = create_message_and_alloc_buffer(&tx,tag->command);
 		if (start_transmission_delayed_with_response_expected(tx) == DWT_ERROR) {
 			free(tx.buffer);
 			free(rx_buffer);
 			return (TAG_TX_ERROR);
 		}
-
-		//uart_transmit_string("Sent:");
-		//uart_transmit_hexa_to_text(tx.buffer, tx.buffer_size);
 
 		free(tx.buffer);
 		free(rx_buffer);
@@ -405,7 +394,7 @@ int uart_transmit_string(char *message) {
 	return (2);
 }
 
-uint32_t create_message_and_alloc_buffer(TX_BUFFER_t *tx) {
+uint32_t create_message_and_alloc_buffer(TX_BUFFER_t *tx,uint8_t command) {
 	uint32_t resp_tx_time = 0;
 	uint64_t resp_tx_timestamp = 0;
 	uint64_t poll_rx_timestamp = 0;
@@ -434,7 +423,7 @@ uint32_t create_message_and_alloc_buffer(TX_BUFFER_t *tx) {
 	}
 
 	// Set the first byte of the buffer to TAG_TIMESTAMP_QUERY
-	tx->buffer[0] = TAG_TIMESTAMP_QUERY;
+	tx->buffer[0] = command;
 
 	// Write tag_id to the buffer starting from the second byte
 	*(uint32_t*) (tx->buffer + 1) = _dwt_otpread(PARTID_ADDRESS);
@@ -538,4 +527,21 @@ int start_transmission_delayed_with_response_expected(TX_BUFFER_t tx) {
 	/* If dwt_starttx() returns an error, abandon this ranging exchange and proceed to the next one. See NOTE 11 below. */
 	return (DWT_SUCCESS);
 
+}
+
+void debug(TAG_t *tag) {
+	/* Calculate the size needed for the formatted string */
+	uint8_t dist_str[150] = { 0 };
+	int size =
+	sprintf(dist_str,
+			"{ID: %lu} , {command: %d} , {times: %lu} , {poll_rx_timestamp: %lu} , {resp_tx_timestamp: %lu} , {distance: %.2f}\n\r",
+			(unsigned long) tag->id,
+			(int) tag->command,
+			(unsigned long) tag->readings,
+			(unsigned long) tag->poll_rx_timestamp,
+			(unsigned long) tag->resp_tx_timestamp,
+			tag->distance.value);
+	/* Transmit the formatted string */
+	HAL_UART_Transmit(&huart1, (uint8_t*) dist_str, (uint16_t) size,
+	HAL_MAX_DELAY);
 }

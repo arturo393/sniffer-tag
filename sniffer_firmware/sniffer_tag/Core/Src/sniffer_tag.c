@@ -7,6 +7,49 @@
 
 #include "sniffer_tag.h"
 
+TAG_t* create_TAG() {
+	TAG_t *tag = (TAG_t*) malloc(sizeof(TAG_t));
+	if (tag == NULL) {
+		// Handle memory allocation failure
+		return NULL;
+	}
+
+	reset_TAG_values(tag);
+
+	return (tag);
+}
+
+void reset_TAG_values(TAG_t *tag) {
+	tag->id = 0;
+	tag->readings = 0;
+	tag->command = 0;
+	tag->distance = NULL;
+	tag->distance_a.tof = 0.0;
+	tag->distance_a.value = 0.0;
+	for (int i = 0; i < DISTANCE_READINGS; i++) {
+		tag->distance_a.readings[i] = 0.0;
+		tag->distance_a.new[i] = 0.0;
+	}
+	tag->distance_a.sum = 0.0;
+	tag->distance_a.last = 0.0;
+	tag->distance_a.error_times = 0;
+	tag->distance_a.counter = 0;
+
+	tag->distance_b.tof = 0.0;
+	tag->distance_b.value = 0.0;
+	for (int i = 0; i < DISTANCE_READINGS; i++) {
+		tag->distance_b.readings[i] = 0.0;
+		tag->distance_b.new[i] = 0.0;
+	}
+	tag->distance_b.sum = 0.0;
+	tag->distance_b.last = 0.0;
+	tag->distance_b.error_times = 0;
+	tag->distance_b.counter = 0;
+
+	tag->resp_tx_timestamp = 0;
+	tag->poll_rx_timestamp = 0;
+}
+
 TAG_STATUS_t handle_sniffer_tag(TAG_t *tag) {
 
 	// Initialize a TX_BUFFER_t instance
@@ -21,12 +64,21 @@ TAG_STATUS_t handle_sniffer_tag(TAG_t *tag) {
 	if (tx.buffer == NULL)
 		Error_Handler();
 
-	if (tag->detection_times < DISTANCE_READINGS) {
+	if (tag->readings < DISTANCE_READINGS) {
 		tx.buffer[0] = TAG_TIMESTAMP_QUERY;
-		if (tag->detection_times == DISTANCE_READINGS-1)
+		if (tag->readings < (DISTANCE_READINGS / 2) - 1) {
+			hw = hw_a;
+			tag->distance = &(tag->distance_a);
+		} else {
+			tx.buffer[0] = TAG_TIMESTAMP_QUERY;
+			hw = hw_b;
+			tag->distance = &(tag->distance_b);
+		}
+
+		if (tag->readings == DISTANCE_READINGS - 1)
 			tx.buffer[0] = TAG_SET_SLEEP_MODE;
 	} else {
-		tag->detection_times = 0;
+		tag->readings = 0;
 		return (TAG_TX_ERROR);
 	}
 
@@ -34,28 +86,21 @@ TAG_STATUS_t handle_sniffer_tag(TAG_t *tag) {
 		free(tx.buffer);
 		return (TAG_TX_ERROR);
 	}
-//	uart_transmit_string("Sent:");
-//	uart_transmit_hexa_to_text(tx.buffer, tx.buffer_size);
 	free(tx.buffer);
-//	uart_transmit_string("ENABLE_RECEIVER\r\n");
 	TAG_STATUS_t status_reg = wait_rx_data();
-
 	if (status_reg != TAG_RX_CRC_VALID)
 		return (status_reg);
-
 	uint8_t *rx_buffer;
 	uint32_t rx_buffer_size = 0;
 	rx_buffer_size = allocate_and_read_received_frame(&rx_buffer);
 //	uart_transmit_string("Receive:");
 //	uart_transmit_hexa_to_text(rx_buffer,rx_buffer_size);
 
-	uint8_t command = rx_buffer[0];
-	switch (command) {
+	tag->command = rx_buffer[0];
+	switch (tag->command) {
 	case TAG_TIMESTAMP_QUERY:
-		//send_message_with_timestamps() == TAG_OK)
 		tag->id = *(uint32_t*) (rx_buffer + 1);
-		tag->distance.value = calculate_tag_distance(rx_buffer,
-				&(tag->distance));
+		tag->distance->value = calculate_tag_distance(rx_buffer, tag->distance);
 
 		tag->poll_rx_timestamp = *(uint32_t*) (rx_buffer + 1 + 4);
 		tag->resp_tx_timestamp = *(uint32_t*) (rx_buffer + 1 + 4 + 4);
@@ -66,8 +111,7 @@ TAG_STATUS_t handle_sniffer_tag(TAG_t *tag) {
 	case TAG_SET_SLEEP_MODE:
 		//send_message_with_timestamps() == TAG_OK)
 		tag->id = *(uint32_t*) (rx_buffer + 1);
-		tag->distance.value = calculate_tag_distance(rx_buffer,
-				&(tag->distance));
+		tag->distance->value = calculate_tag_distance(rx_buffer, tag->distance);
 		free(rx_buffer);
 		return (TAG_RESET);
 	default:
@@ -239,7 +283,7 @@ double calculate_tag_distance(uint8_t *rx_buffer, Distance_t *distance) {
 	distance->value = tof * SPEED_OF_LIGHT;
 
 //The data were smoothed and filtered
-	distance_moving_average(distance);
+	distance_smooth(distance);
 	return (distance->value);
 }
 
@@ -409,7 +453,26 @@ double distance_moving_average(Distance_t *distance) {
 
 	return (distance->value);
 }
-
+double distance_smooth(Distance_t *distance) {
+////Perform average on sensor readings
+// subtract the last reading:
+	distance->sum = distance->sum - distance->readings[distance->counter];
+// read the sensor:
+	if(fabs(distance->value - distance->last) > MAX_DISTANCE_ERROR)
+		distance->value = distance->last;
+	distance->readings[distance->counter] = distance->value;
+// add value to total:
+	distance->sum = distance->sum + distance->readings[distance->counter];
+// handle index
+	distance->counter = distance->counter + 1;
+	if (distance->counter >= DISTANCE_READINGS) {
+		distance->counter = 0;
+	}
+// calculate the average:
+	distance->last = distance->sum / DISTANCE_READINGS;
+	distance->last = distance->value;
+	return (distance->value);
+}
 void uart_transmit_hexa_to_text(uint8_t *message, uint8_t size) {
 	uint8_t *hexa_text = (uint8_t*) malloc(sizeof(uint8_t) * size);
 	for (int i = 0; i < size; i++) {
@@ -592,4 +655,20 @@ void uart_transmit_int_to_text(int distanceValue) {
 
 	/* Free the dynamically allocated memory */
 	free(dist_str);
+}
+
+void debug(TAG_t *tag) {
+	/* Calculate the size needed for the formatted string */
+	uint8_t dist_str[154] = { 0 };
+	int size =
+			sprintf(dist_str,
+					"{ID: %lu},{command: %d},{times: %lu},{poll_rx_ts: %lu},{resp_tx_ts: %lu},{distance_a: %.2f},{distance_b: %.2f}\n\r",
+					(unsigned long) tag->id, (int) tag->command,
+					(unsigned long) tag->readings,
+					(unsigned long) tag->poll_rx_timestamp,
+					(unsigned long) tag->resp_tx_timestamp,
+					tag->distance_a.value, tag->distance_b.value);
+	/* Transmit the formatted string */
+	HAL_UART_Transmit(&huart1, (uint8_t*) dist_str, (uint16_t) size,
+	HAL_MAX_DELAY);
 }

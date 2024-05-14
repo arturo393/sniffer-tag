@@ -179,7 +179,9 @@ int main(void) {
 	tag->distance.counter = 0;
 	tag->distance.last = 0;
 	tag->distance.error_times = 0;
-	tag->detection_times = 0;
+	tag->readings = 0;
+	tag->distance.value = 0;
+	tag->distance.sum = 0;
 	tag->id = 0;
 
 	TAG_STATUS_t tag_status;
@@ -200,27 +202,18 @@ int main(void) {
 			break;
 
 		case TAG_TX_ERROR:
-			uart_transmit_string("TAG_TX_ERROR");
+			uart_transmit_string("TAG_TX_ERROR\n\r");
 			break;
 		case TAG_OK:
-			/* Calculate the size needed for the formatted string */
-			// Using sprintf to format the string into the buffer
-			int size =
-					sprintf(dist_str,
-							"{ID: %lu} , {times: %lu} , {poll_rx_timestamp: %lu} , {resp_tx_timestamp: %lu} \n\r",
-							(unsigned long) tag->id,
-							(unsigned long) tag->detection_times,
-							(unsigned long) tag->poll_rx_timestamp,
-							(unsigned long) tag->resp_tx_timestamp);
-			/* Transmit the formatted string */
-			HAL_UART_Transmit(&huart1, (uint8_t*) dist_str, (uint16_t) size,
-			HAL_MAX_DELAY);
-			tag->detection_times++;
+			tag->readings++;
+			debug(tag);
 			break;
 
 		case TAG_SLEEP:
-			tag->detection_times = 0;
-			HAL_Delay(5000);
+			tag->readings++;
+			debug(tag);
+			tag->readings = 0;
+			HAL_Delay(10000);
 			break;
 		default:
 			break;

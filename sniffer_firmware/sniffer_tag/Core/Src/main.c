@@ -31,6 +31,8 @@ double *distance_ptr;
 TAG_t *tag;
 int size = 0;
 uint8_t running_device = DEV_UWB3000F00;
+SPI_HW_t *hw_a;
+SPI_HW_t *hw_b;
 SPI_HW_t *hw;
 dwt_local_data_t *pdw3000local;
 uint8_t crcTable[256];
@@ -140,45 +142,55 @@ int main(void) {
 
 	char dist_str[100];
 	int size;
-	hw = malloc(sizeof(SPI_HW_t));
-	if (hw == NULL)
+	hw_a = malloc(sizeof(SPI_HW_t));
+	if (hw_a == NULL)
 		Error_Handler();
 
-	hw->spi = &hspi1;
-	hw->nrstPin = DW3000_RST_Pin;
-	hw->nrstPort = DW3000_RST_GPIO_Port;
-	hw->nssPin = SPI1_CS_Pin;
-	hw->nssPort = SPI1_CS_GPIO_Port;
-	size = sprintf((char*) dist_str, "\n\rDEV_UWB3000F27 init\n\r");
+	hw_a->spi = &hspi1;
+	hw_a->nrstPin = DW3000_RST_Pin;
+	hw_a->nrstPort = DW3000_RST_GPIO_Port;
+	hw_a->nssPin = SPI1_CS_Pin;
+	hw_a->nssPort = SPI1_CS_GPIO_Port;
+	size = sprintf((char*) dist_str, "\n\rDEV_UWB3000F27_A init\n\r");
 	HAL_UART_Transmit(&huart1, (uint8_t*) dist_str, (uint16_t) size,
 	HAL_MAX_DELAY);
 
-	HAL_GPIO_WritePin(hw->nrstPort, hw->nrstPin, GPIO_PIN_RESET);/* Target specific drive of RSTn line into DW IC low for a period. */
+	HAL_GPIO_WritePin(hw_a->nrstPort, hw_a->nrstPin, GPIO_PIN_RESET);/* Target specific drive of RSTn line into DW IC low for a period. */
 	HAL_Delay(1);
-	HAL_GPIO_WritePin(hw->nrstPort, hw->nrstPin, GPIO_PIN_SET);
+	HAL_GPIO_WritePin(hw_a->nrstPort, hw_a->nrstPin, GPIO_PIN_SET);
+	hw = hw_a;
 	if (tag_init(&defatult_dwt_config, &defatult_dwt_txconfig, &dwt_local_data,
 			running_device, RATE_6M8) == 1)
 		Error_Handler();
 
+	hw_b = malloc(sizeof(SPI_HW_t));
+	if (hw_b == NULL)
+		Error_Handler();
+
+	hw_b->spi = &hspi1;
+	hw_b->nrstPin = DW3000_RST_RCV_Pin;
+	hw_b->nrstPort = DW3000_RST_RCV_GPIO_Port;
+	hw_b->nssPin = SPI2_CS_Pin;
+	hw_b->nssPort = SPI2_CS_GPIO_Port;
+	size = sprintf((char*) dist_str, "\n\rDEV_UWB3000F27_B init\n\r");
+	HAL_UART_Transmit(&huart1, (uint8_t*) dist_str, (uint16_t) size,
+	HAL_MAX_DELAY);
+
+	HAL_GPIO_WritePin(hw_b->nrstPort, hw_b->nrstPin, GPIO_PIN_RESET);/* Target specific drive of RSTn line into DW IC low for a period. */
+	HAL_Delay(1);
+	HAL_GPIO_WritePin(hw_b->nrstPort, hw_b->nrstPin, GPIO_PIN_SET);
+	hw = hw_b;
+	if (tag_init(&defatult_dwt_config, &defatult_dwt_txconfig, &dwt_local_data,
+			running_device, RATE_6M8) == 1)
+		Error_Handler();
+
+
+
+
 	/* Frames used in the ranging process. See NOTE 2 below. */
 
 	/* Hold copy of status register state here for reference so that it can be examined at a debug breakpoint. */
-	tag = malloc(sizeof(TAG_t));
-	if (tag == NULL)
-		Error_Handler();
-
-	tag->distance.counter = 0;
-	tag->distance.last = 0;
-	tag->distance.error_times = 0;
-	tag->detection_times = 0;
-	tag->distance.value = 0;
-	tag->distance.sum = 0;
-	tag->id = 0;
-	for (int i = 0; i < DISTANCE_READINGS; i++) {
-		tag->distance.readings[i] = 0;
-		tag->distance.new[i] = 0;
-	}
-
+	tag = create_TAG();
 	TAG_STATUS_t tag_status;
 	/* Time-stamps of frames transmission/reception, expressed in device time units. */
 	/* USER CODE END 2 */
@@ -210,7 +222,6 @@ int main(void) {
 		case TAG_RX_ERROR:
 			uart_transmit_string("TAG_RX_ERROR\n\r");
 			break;
-			break;
 		case TAG_RX_DATA_ZERO:
 			// Handle the case when there is no RX data
 			break;
@@ -220,39 +231,15 @@ int main(void) {
 			// Handle the case when everything is OK
 			break;
 		case TAG_RESET:
-			tag->distance.counter = 0;
-			tag->distance.last = 0;
-			tag->distance.error_times = 0;
-			tag->detection_times = 0;
-			tag->id = 0;
-			tag->distance.value = 0;
-			tag->distance.sum = 0;
-			for (int i = 0; i < DISTANCE_READINGS; i++) {
-				tag->distance.readings[i] = 0;
-				tag->distance.new[i] = 0;
-			}
+			debug(tag);
+			reset_TAG_values(tag);
 			break;
 		case TAG_HUMAN_DISTANCE_OK:
-			tag->detection_times++;
-			if (tag->detection_times == DISTANCE_READINGS) {
-				tag->detection_times = 0;
+			tag->readings++;
+			//debug(tag);
+			if (tag->readings == DISTANCE_READINGS) {
+				tag->readings = 0;
 			}
-
-			/* Calculate the size needed for the formatted string */
-			size =
-					sprintf(dist_str,
-							"{ID: %lu} , {times: %lu} , {poll_rx_timestamp: %lu} , {resp_tx_timestamp: %lu} , {distance: %.2f}\r",
-							(unsigned long) tag->id,
-							(unsigned long) tag->detection_times,
-							(unsigned long) tag->poll_rx_timestamp,
-							(unsigned long) tag->resp_tx_timestamp,
-							tag->distance.value);
-			size++; // Include space for the null terminator
-
-			/* Transmit the formatted string */
-			HAL_UART_Transmit(&huart1, (uint8_t*) dist_str, (uint16_t) size,
-			HAL_MAX_DELAY);
-
 
 			break;
 		case TAG_RX_NO_COMMAND:
