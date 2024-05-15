@@ -971,5 +971,13 @@ void resp_msg_set_ts(uint8_t *ts_field, const uint64_t ts);
 uint32_t get_rx_delay_time_data_rate(dwt_config_t *config_options);
 uint32_t get_rx_delay_time_txpreamble(dwt_config_t *config_options);
 void deca_usleep(unsigned int usec);
-
+// -------------------------------------------------------------------------------------------------------------------
+// Internal functions prototypes for controlling and configuring the device
+//
+void dwt_force_clocks(int clocks);
+uint32_t _dwt_otpread(uint16_t address);      // Read non-volatile memory
+void _dwt_otpprogword32(uint32_t data, uint16_t address); // Program the non-volatile memory
+uint16_t dwt_readtempvbat(void);
+float dwt_convertrawtemperature(uint8_t raw_temp);
+float dwt_convertrawvoltage(uint8_t raw_voltage);
 #endif /* INC_TAG_C_ */

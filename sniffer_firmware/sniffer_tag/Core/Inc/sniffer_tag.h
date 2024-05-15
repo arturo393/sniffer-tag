@@ -9,8 +9,10 @@
 #define INC_SNIFFER_TAG_H_
 
 #include "main.h"
-#include "stdlib.h"
 #include "uwb3000Fxx.h"
+#include <stdio.h>
+#include <stdarg.h>
+#include <stdlib.h>
 
 extern UART_HandleTypeDef huart1;
 extern SPI_HW_t *hw_a;
@@ -31,6 +33,12 @@ typedef struct {
 	uint8_t counter;
 } Distance_t;
 
+typedef struct{
+	uint8_t calibrated;
+	uint8_t raw;
+	float real;
+}Mesurement_data_t;
+
 typedef struct {
 	uint32_t id;
 	int readings;
@@ -38,9 +46,12 @@ typedef struct {
 	Distance_t *distance;
 	Distance_t distance_a;
 	Distance_t distance_b;
+	Mesurement_data_t temperature;
+	Mesurement_data_t battery_voltage;
 	uint32_t resp_tx_timestamp;
 	uint32_t poll_rx_timestamp;
 } TAG_t;
+
 
 typedef struct buffer {
     uint8_t *buffer;
@@ -65,7 +76,7 @@ typedef enum{
 	TAG_RX_NO_COMMAND,
 	TAG_TX_ERROR,
 	TAG_HUMAN_DISTANCE_OK,
-	TAG_RESET
+	TAG_END_READINGS
 
 }TAG_STATUS_t;
 
@@ -82,14 +93,11 @@ uint32_t send_response_with_timestamps(uint8_t *tx_resp_msg, uint8_t size,
 		uint32_t frame_seq_nb);
 uint32_t allocate_and_read_received_frame(uint8_t **rx_buffer);
 double distance_moving_average(Distance_t *distance);
-void uart_transmit_hexa_to_text( uint8_t *message,
-		uint8_t size);
-void uart_transmit_float_to_text( double distanceValue);
-int uart_transmit_string(char *message);
-void uart_transmit_int_to_text(int distanceValue);
 int start_transmission_inmediate_with_response_expected(TX_BUFFER_t tx);
 TAG_STATUS_t wait_rx_data();
 void debug(TAG_t *tag);
 double distance_smooth(Distance_t *distance);
+void set_battery_voltage(Mesurement_data_t *battery_voltage);
+void set_temperature(Mesurement_data_t * temperature);
 #endif /* INC_SNIFFER_TAG_H_ */
 

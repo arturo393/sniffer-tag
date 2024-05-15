@@ -30,8 +30,7 @@ TAG_STATUS_t handle_human_tag(TAG_t *tag) {
 		tx.delay = RESP_TX_TO_FINAL_RX_DLY_UUS_6M8;
 		tx.rx_timeout = FINAL_RX_TIMEOUT_UUS_6M8;
 		tx.preamble_timeout = PRE_TIMEOUT_6M8;
-		tx.buffer_size = create_message_and_alloc_buffer(&tx,tag->command);
-
+		tx.buffer_size = create_message_and_alloc_buffer(&tx,tag);
 		if (start_transmission_delayed_with_response_expected(tx) == DWT_ERROR) {
 			free(tx.buffer);
 			free(rx_buffer);
@@ -51,7 +50,7 @@ TAG_STATUS_t handle_human_tag(TAG_t *tag) {
 		tx.delay = RESP_TX_TO_FINAL_RX_DLY_UUS_6M8;
 		tx.rx_timeout = FINAL_RX_TIMEOUT_UUS_6M8;
 		tx.preamble_timeout = PRE_TIMEOUT_6M8;
-		tx.buffer_size = create_message_and_alloc_buffer(&tx,tag->command);
+		tx.buffer_size = create_message_and_alloc_buffer(&tx,tag);
 		if (start_transmission_delayed_with_response_expected(tx) == DWT_ERROR) {
 			free(tx.buffer);
 			free(rx_buffer);
@@ -371,6 +370,7 @@ void uart_transmit_int_to_text(int distanceValue) {
 	/* Free the dynamically allocated memory */
 	free(dist_str);
 }
+
 int uart_transmit_string(char *message) {
 	uint16_t message_size = strlen(message) + 1; // Include space for the null terminator
 
@@ -394,7 +394,7 @@ int uart_transmit_string(char *message) {
 	return (2);
 }
 
-uint32_t create_message_and_alloc_buffer(TX_BUFFER_t *tx,uint8_t command) {
+uint32_t create_message_and_alloc_buffer(TX_BUFFER_t  *tx,TAG_t *tag) {
 	uint32_t resp_tx_time = 0;
 	uint64_t resp_tx_timestamp = 0;
 	uint64_t poll_rx_timestamp = 0;
@@ -413,7 +413,7 @@ uint32_t create_message_and_alloc_buffer(TX_BUFFER_t *tx,uint8_t command) {
 			(((uint64_t) (resp_tx_time & RESPONSE_TX_TIME_MASK_VALUE))
 					<< RESPONSE_TX_TIME_SHIFT_AMOUNT) + TX_ANT_DLY_LP;
 	/** Calculate the size needed for the response message buffer */
-	tx->buffer_size = sizeof(uint8_t) + 3 * sizeof(uint32_t);
+	tx->buffer_size = sizeof(uint8_t) + 3 * sizeof(uint32_t)+4*sizeof(uint8_t);
 
 	/** Allocate memory for the response message buffer */
 	tx->buffer = (uint8_t*) malloc(tx->buffer_size);
@@ -423,7 +423,7 @@ uint32_t create_message_and_alloc_buffer(TX_BUFFER_t *tx,uint8_t command) {
 	}
 
 	// Set the first byte of the buffer to TAG_TIMESTAMP_QUERY
-	tx->buffer[0] = command;
+	tx->buffer[0] = tag->command;
 
 	// Write tag_id to the buffer starting from the second byte
 	*(uint32_t*) (tx->buffer + 1) = _dwt_otpread(PARTID_ADDRESS);
@@ -432,8 +432,20 @@ uint32_t create_message_and_alloc_buffer(TX_BUFFER_t *tx,uint8_t command) {
 	*(uint32_t*) (tx->buffer + 1 + sizeof(uint32_t)) = poll_rx_timestamp;
 
 	// Write resp_tx_timestamp to the buffer
-	*(uint32_t*) (tx->buffer + 1 + sizeof(uint32_t) + sizeof(uint32_t)) =
+	*(uint32_t*) (tx->buffer + 1 + 2*sizeof(uint32_t)) =
 			resp_tx_timestamp;
+	// Write resp_tx_timestamp to the buffer
+	*(uint8_t*) (tx->buffer + 1 + 3* sizeof(uint32_t)) =
+			tag->raw_battery_voltage;
+	// Write resp_tx_timestamp to the buffer
+	*(uint8_t*) (tx->buffer + 1 + 3*sizeof(uint32_t) + sizeof(uint8_t)) =
+			tag->calibrated_battery_voltage;
+	// Write resp_tx_timestamp to the buffer
+	*(uint8_t*) (tx->buffer + 1 + 3*sizeof(uint32_t) + 2*sizeof(uint8_t)) =
+			tag->raw_temperature;
+	// Write resp_tx_timestamp to the buffer
+	*(uint8_t*) (tx->buffer + 1 + 3*sizeof(uint32_t) + 3*sizeof(uint8_t)) =
+			tag->calibrateds_temperature;
 
 	tx->poll_rx_timestamp = poll_rx_timestamp;
 	tx->resp_tx_timestamp = resp_tx_timestamp;

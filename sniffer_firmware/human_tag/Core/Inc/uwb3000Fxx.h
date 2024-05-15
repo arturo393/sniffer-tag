@@ -978,6 +978,8 @@ void deca_usleep(unsigned int usec);
 void dwt_force_clocks(int clocks);
 uint32_t _dwt_otpread(uint16_t address);      // Read non-volatile memory
 void _dwt_otpprogword32(uint32_t data, uint16_t address); // Program the non-volatile memory
-
+uint16_t dwt_readtempvbat(void);
+float set_temperature(uint8_t raw_temp);
+float dwt_convertrawvoltage(uint8_t raw_voltage);
 
 #endif /* INC_TAG_C_ */

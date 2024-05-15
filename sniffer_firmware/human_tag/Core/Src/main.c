@@ -190,6 +190,14 @@ int main(void) {
 
 	/* Infinite loop */
 	tag->id = _dwt_otpread(PARTID_ADDRESS);
+	tag->calibrateds_temperature =  _dwt_otpread(VTEMP_ADDRESS);
+	tag->calibrated_battery_voltage = _dwt_otpread(VBAT_ADDRESS);
+	uint16_t read_temp_vbat =  dwt_readtempvbat();
+	tag->raw_temperature = (uint8_t) (read_temp_vbat>>8);
+	tag->raw_battery_voltage = (uint8_t) (read_temp_vbat);
+	float temperature =  set_temperature(tag->raw_temperature);
+	float battery_voltage = dwt_convertrawvoltage(tag->raw_battery_voltage);
+
 	/* USER CODE BEGIN WHILE */
 	while (1) {
 

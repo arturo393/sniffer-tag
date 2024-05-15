@@ -4516,7 +4516,7 @@ uint16_t dwt_readtempvbat(void) {
  *
  * returns: temperature sensor value
  */
-float dwt_convertrawtemperature(uint8_t raw_temp) {
+float set_temperature(uint8_t raw_temp) {
 	float realtemp;
 
 	// the User Manual formula is: Temperature (�C) = ( (SAR_LTEMP ?OTP_READ(Vtemp @ 20�C) ) x 1.05)        // Vtemp @ 20�C

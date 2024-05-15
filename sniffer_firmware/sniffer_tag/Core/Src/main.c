@@ -184,14 +184,27 @@ int main(void) {
 			running_device, RATE_6M8) == 1)
 		Error_Handler();
 
-
-
-
 	/* Frames used in the ranging process. See NOTE 2 below. */
 
 	/* Hold copy of status register state here for reference so that it can be examined at a debug breakpoint. */
 	tag = create_TAG();
 	TAG_STATUS_t tag_status;
+	uint32_t bat = _dwt_otpread(VBAT_ADDRESS);
+	uint8_t bat1 = (uint8_t) (bat >> 16);
+	uint8_t bat2 = (uint8_t) (bat >> 8);
+	uint8_t bat3 = (uint8_t) bat;
+
+	int temp = bat1 + bat2 + bat3;
+	temp++;
+	uint16_t read_temp_vbat = dwt_readtempvbat();
+	uint8_t raw_temp = (uint8_t) (read_temp_vbat >> 8);
+	uint8_t raw_vbbat = (uint8_t) (read_temp_vbat);
+	float temperature = dwt_convertrawtemperature(raw_temp);
+	float battery_voltage = dwt_convertrawvoltage(raw_vbbat);
+
+	float temp2 = temperature + battery_voltage;
+	temp2++;
+
 	/* Time-stamps of frames transmission/reception, expressed in device time units. */
 	/* USER CODE END 2 */
 
@@ -203,54 +216,59 @@ int main(void) {
 
 		switch (tag_status) {
 		case TAG_NO_RXCG_DETECTED:
-			// Handle the case when no RXCG is detected
-			uart_transmit_string("TAG_NO_RXCG_DETECTED\r");
+			HAL_UART_Transmit(&huart1, (uint8_t*) "TAG_NO_RXCG_DETECTED\r",
+					strlen("TAG_NO_RXCG_DETECTED\r"), HAL_MAX_DELAY);
 			break;
 		case TAG_RX_FRAME_TIMEOUT:
-			uart_transmit_string("TAG_RX_FRAME_TIMEOUT\r");
-			// Handle the case when there is a RX timeout
+			HAL_UART_Transmit(&huart1, (uint8_t*) "TAG_RX_FRAME_TIMEOUT\r",
+					strlen("TAG_RX_FRAME_TIMEOUT\r"), HAL_MAX_DELAY);
+			break;
 			break;
 		case TAG_RX_PREAMBLE_DETECTION_TIMEOUT:
-			uart_transmit_string("TAG_RX_PREAMBLE_DETECTION_TIMEOUT\r");
+			HAL_UART_Transmit(&huart1,
+					(uint8_t*) "TAG_RX_PREAMBLE_DETECTION_TIMEOUT\r",
+					strlen("TAG_RX_PREAMBLE_DETECTION_TIMEOUT\r"),
+					HAL_MAX_DELAY);
 			dwt_write32bitreg(SYS_STATUS_ID,
 					SYS_STATUS_ALL_RX_TO | SYS_STATUS_ALL_RX_ERR | SYS_STATUS_TXFRS_BIT_MASK);
-			// Handle the case when there is a RX timeout
 			break;
 		case TAG_RX_CRC_VALID:
-			// Handle the case when the RX CRC is valid
 			break;
 		case TAG_RX_ERROR:
-			uart_transmit_string("TAG_RX_ERROR\n\r");
+			HAL_UART_Transmit(&huart1, (uint8_t*) "TAG_RX_ERROR\r",
+					strlen("TAG_RX_ERROR\r"), HAL_MAX_DELAY);
 			break;
 		case TAG_RX_DATA_ZERO:
-			// Handle the case when there is no RX data
 			break;
 		case TAG_NO_RESPONSE:
 			break;
 		case TAG_OK:
-			// Handle the case when everything is OK
 			break;
-		case TAG_RESET:
+		case TAG_END_READINGS:
+
+			set_battery_voltage(&(tag->battery_voltage));
+			set_temperature(&(tag->temperature));
 			debug(tag);
 			reset_TAG_values(tag);
 			break;
 		case TAG_HUMAN_DISTANCE_OK:
 			tag->readings++;
-			//debug(tag);
 			if (tag->readings == DISTANCE_READINGS) {
 				tag->readings = 0;
 			}
 
 			break;
 		case TAG_RX_NO_COMMAND:
-			uart_transmit_string("TAG_RX_NO_COMMAND\n\r");
+			HAL_UART_Transmit(&huart1, (uint8_t*) "TAG_RX_NO_COMMAND\r",
+					strlen("TAG_RX_NO_COMMAND\r"), HAL_MAX_DELAY);
 			break;
 		case TAG_TX_ERROR:
-			uart_transmit_string("TAG_TX_ERROR\n\r");
+			HAL_UART_Transmit(&huart1, (uint8_t*) "TAG_TX_ERROR\r",
+					strlen("TAG_TX_ERROR\r"), HAL_MAX_DELAY);
 			break;
 
 		default:
-			// Handle any other cases not explicitly covered
+
 			break;
 		}
 

@@ -52,14 +52,12 @@ void reset_TAG_values(TAG_t *tag) {
 
 TAG_STATUS_t handle_sniffer_tag(TAG_t *tag) {
 
-	// Initialize a TX_BUFFER_t instance
 	TX_BUFFER_t tx;
 	tx.buffer = NULL;
 	tx.buffer_size = 1;
 	tx.delay = POLL_TX_TO_RESP_RX_DLY_UUS_6M8;
 	tx.rx_timeout = RESP_RX_TIMEOUT_UUS_6M8;
 	tx.preamble_timeout = PRE_TIMEOUT_6M8;
-	// Allocate memory for the buffer
 	tx.buffer = (uint8_t*) malloc(tx.buffer_size);
 	if (tx.buffer == NULL)
 		Error_Handler();
@@ -93,27 +91,26 @@ TAG_STATUS_t handle_sniffer_tag(TAG_t *tag) {
 	uint8_t *rx_buffer;
 	uint32_t rx_buffer_size = 0;
 	rx_buffer_size = allocate_and_read_received_frame(&rx_buffer);
-//	uart_transmit_string("Receive:");
-//	uart_transmit_hexa_to_text(rx_buffer,rx_buffer_size);
 
 	tag->command = rx_buffer[0];
 	switch (tag->command) {
 	case TAG_TIMESTAMP_QUERY:
 		tag->id = *(uint32_t*) (rx_buffer + 1);
 		tag->distance->value = calculate_tag_distance(rx_buffer, tag->distance);
-
 		tag->poll_rx_timestamp = *(uint32_t*) (rx_buffer + 1 + 4);
-		tag->resp_tx_timestamp = *(uint32_t*) (rx_buffer + 1 + 4 + 4);
-
+		tag->resp_tx_timestamp = *(uint32_t*) (rx_buffer + 1 + 2*4);
+		tag->battery_voltage.raw = *(uint8_t*) (rx_buffer + 1 + 3*4 );
+		tag->battery_voltage.calibrated = *(uint8_t*) (rx_buffer + 1 + 3*4 + 1);
+		tag->temperature.raw = *(uint8_t*) (rx_buffer + 1 + 3*4 + 2*1);
+		tag->temperature.calibrated = *(uint8_t*) (rx_buffer + 1 + 3*4 + 3*1);
 		free(rx_buffer);
 		return (TAG_HUMAN_DISTANCE_OK);
 		break;
 	case TAG_SET_SLEEP_MODE:
-		//send_message_with_timestamps() == TAG_OK)
 		tag->id = *(uint32_t*) (rx_buffer + 1);
 		tag->distance->value = calculate_tag_distance(rx_buffer, tag->distance);
 		free(rx_buffer);
-		return (TAG_RESET);
+		return (TAG_END_READINGS);
 	default:
 		return (TAG_RX_NO_COMMAND);
 		free(rx_buffer);
@@ -409,7 +406,7 @@ uint32_t allocate_and_read_received_frame(uint8_t **rx_buffer) {
 			return rx_buffer_size;
 		} else {
 			/* Memory allocation failed. */
-			return 0; // Return 0 to indicate failure
+			return 0;
 		}
 	}
 
@@ -458,7 +455,7 @@ double distance_smooth(Distance_t *distance) {
 // subtract the last reading:
 	distance->sum = distance->sum - distance->readings[distance->counter];
 // read the sensor:
-	if(fabs(distance->value - distance->last) > MAX_DISTANCE_ERROR)
+	if (fabs(distance->value - distance->last) > MAX_DISTANCE_ERROR)
 		distance->value = distance->last;
 	distance->readings[distance->counter] = distance->value;
 // add value to total:
@@ -472,64 +469,6 @@ double distance_smooth(Distance_t *distance) {
 	distance->last = distance->sum / DISTANCE_READINGS;
 	distance->last = distance->value;
 	return (distance->value);
-}
-void uart_transmit_hexa_to_text(uint8_t *message, uint8_t size) {
-	uint8_t *hexa_text = (uint8_t*) malloc(sizeof(uint8_t) * size);
-	for (int i = 0; i < size; i++) {
-		sprintf((char*) hexa_text, "%02X", message[i]); // Print with leading zeros for 2-digit format
-		HAL_UART_Transmit(&huart1, hexa_text, (uint16_t) 2,
-		HAL_MAX_DELAY);
-	}
-	sprintf((char*) hexa_text, "\n\r");
-	HAL_UART_Transmit(&huart1, hexa_text, (uint16_t) 2,
-	HAL_MAX_DELAY);
-	free(hexa_text);
-}
-
-void uart_transmit_float_to_text(double distanceValue) {
-	/* Calculate the size needed for the formatted string */
-	int size = snprintf(NULL, 0, "%.2f\n\r", distanceValue);
-	size++; // Include space for the null terminator
-
-	/* Dynamically allocate memory for dist_str */
-	char *dist_str = (char*) malloc(size * sizeof(char));
-	if (dist_str == NULL) {
-		// Handle allocation failure
-		// For example: return an error code or exit the function
-		return;
-	}
-
-	/* Format the string into dist_str */
-	sprintf(dist_str, "%.2f\n\r", distanceValue);
-
-	/* Transmit the formatted string */
-	HAL_UART_Transmit(&huart1, (uint8_t*) dist_str, size, HAL_MAX_DELAY);
-
-	/* Free the dynamically allocated memory */
-	free(dist_str);
-}
-
-int uart_transmit_string(char *message) {
-	uint16_t message_size = strlen(message) + 1; // Include space for the null terminator
-
-// Dynamically allocate memory for the message
-	char *dynamic_message = (char*) malloc(message_size * sizeof(char));
-	if (dynamic_message == NULL) {
-		// Handle allocation failure
-		return -1; // Return an error code
-	}
-
-// Copy the message to the dynamically allocated memory
-	strcpy(dynamic_message, message);
-
-// Transmit the dynamic message
-	HAL_UART_Transmit(&huart1, (uint8_t*) dynamic_message, message_size,
-	HAL_MAX_DELAY);
-
-// Free the dynamically allocated memory
-	free(dynamic_message);
-
-	return (2);
 }
 
 int send_message_with_human_tag_timestamp() {
@@ -594,7 +533,7 @@ int start_transmission_inmediate_with_response_expected(TX_BUFFER_t tx) {
 
 	return (rets);
 }
-#define RX_TIMEOUT_MS 1000 // Timeout value in milliseconds
+#define RX_TIMEOUT_MS 1000
 
 TAG_STATUS_t wait_rx_data() {
 	uint32_t status_reg;
@@ -637,13 +576,12 @@ TAG_STATUS_t wait_rx_data() {
 void uart_transmit_int_to_text(int distanceValue) {
 	/* Calculate the size needed for the formatted string */
 	int size = snprintf(NULL, 0, "%u\n\r", distanceValue);
-	size++; // Include space for the null terminator
+	size++;
 
 	/* Dynamically allocate memory for dist_str */
 	char *dist_str = (char*) malloc(size * sizeof(char));
 	if (dist_str == NULL) {
-		// Handle allocation failure
-		// For example: return an error code or exit the function
+
 		return;
 	}
 
@@ -658,17 +596,41 @@ void uart_transmit_int_to_text(int distanceValue) {
 }
 
 void debug(TAG_t *tag) {
-	/* Calculate the size needed for the formatted string */
-	uint8_t dist_str[154] = { 0 };
-	int size =
-			sprintf(dist_str,
-					"{ID: %lu},{command: %d},{times: %lu},{poll_rx_ts: %lu},{resp_tx_ts: %lu},{distance_a: %.2f},{distance_b: %.2f}\n\r",
+	/* Format the string directly into the dynamically allocated buffer */
+	char *dist_str = NULL;
+	int size = 0;
+
+	size =
+			asprintf(&dist_str,
+					"{ID: %lu},{command: %d},{times: %lu},{poll_rx_ts: %lu},{resp_tx_ts: %lu},{distance_a: %.2f},{battery_voltage: %.2f},{temperature: %.2f}\n\r",
 					(unsigned long) tag->id, (int) tag->command,
 					(unsigned long) tag->readings,
 					(unsigned long) tag->poll_rx_timestamp,
 					(unsigned long) tag->resp_tx_timestamp,
-					tag->distance_a.value, tag->distance_b.value);
-	/* Transmit the formatted string */
-	HAL_UART_Transmit(&huart1, (uint8_t*) dist_str, (uint16_t) size,
-	HAL_MAX_DELAY);
+					tag->distance_a.value, (float) tag->battery_voltage.real,
+					(float) tag->temperature.real);
+
+	if (size != -1 && dist_str != NULL) {
+		/* Transmit the formatted string */
+		HAL_UART_Transmit(&huart1, (uint8_t*) dist_str, size, HAL_MAX_DELAY);
+
+		/* Free the allocated memory */
+		free(dist_str);
+	}
+}
+
+void set_battery_voltage(Mesurement_data_t *measurement) {
+	/* Bench measurements gives approximately:
+	 * VDDBAT = sar_read * Vref / max_code * 16x_atten   - assume Vref @ 3.0V
+	 */
+	measurement->real = (float) ((float) (measurement->raw
+			- measurement->calibrated) * 0.4f * 16 / 255) + 3.0f;
+}
+
+void set_temperature(Mesurement_data_t *measurement) {
+	/* the User Manual formula is:
+	 * Temperature (�C) = ( (SAR_LTEMP ?OTP_READ(Vtemp @ 20�C) ) x 1.05)        // Vtemp @ 20�C
+	 */
+	measurement->real = (float) ((measurement->raw - measurement->calibrated)
+			* 1.05f) + 20.0f;
 }
