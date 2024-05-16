@@ -17,23 +17,24 @@
  */
 /* USER CODE END Header */
 /* Includes ------------------------------------------------------------------*/
-#include <human_tag.h>
 #include "main.h"
+
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-
+#include "human_tag.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
 /* USER CODE BEGIN PTD */
 
-double *distance_ptr;
+
 TAG_t *tag;
 int size = 0;
 uint8_t running_device = DEV_UWB3000F00;
-SPI_HW_t *hw;
+SPI_HW_t hw;
 dwt_local_data_t *pdw3000local;
 uint8_t crcTable[256];
+char recvChar;
 
 /* USER CODE END PTD */
 
@@ -110,16 +111,7 @@ int main(void) {
 	MX_TIM4_Init();
 	MX_USART1_UART_Init();
 	/* USER CODE BEGIN 2 */
-	/*
-	 uint8_t addr[3] = {0};
-	 uint8_t addr_count= 0;
-	 for(i=1; i<128; i++)
-	 {
-	 ret = HAL_I2C_IsDeviceReady(&hi2c1, (uint16_t)(i<<1), 3, 5);
-	 if(ret == HAL_OK)
-	 addr[addr_count++]=i;
-	 }
-	 */
+
 	HAL_GPIO_WritePin(GPIOA, DW3000_RST_Pin, GPIO_PIN_SET);
 	/*Local device data, can be an array to support multiple DW3000 testing applications/platforms */
 
@@ -148,23 +140,19 @@ int main(void) {
 	0x0 /*PG count*/
 	};
 
-	char dist_str[200];
-	int size;
-	hw = malloc(sizeof(SPI_HW_t));
-	if (hw == NULL)
-		Error_Handler();
-	hw->spi = &hspi2;
-	hw->nrstPin = DW3000_RST_RCV_Pin;
-	hw->nrstPort = DW3000_RST_RCV_GPIO_Port;
-	hw->nssPin = SPI2_CS_Pin;
-	hw->nssPort = SPI2_CS_GPIO_Port;
-	size = sprintf((char*) dist_str, "\n\rDEV_UWB3000F00 init\n\r");
-	HAL_UART_Transmit(&huart1, (uint8_t*) dist_str, (uint16_t) size,
-	HAL_MAX_DELAY);
+	hw.spi = &hspi2;
+	hw.nrstPin = DW3000_RST_RCV_Pin;
+	hw.nrstPort = DW3000_RST_RCV_GPIO_Port;
+	hw.nssPin = SPI2_CS_Pin;
+	hw.nssPort = SPI2_CS_GPIO_Port;
 
-	HAL_GPIO_WritePin(hw->nrstPort, hw->nrstPin, GPIO_PIN_RESET);/* Target specific drive of RSTn line into DW IC low for a period. */
+	HAL_UART_Transmit(&huart1, (uint8_t*) "\n\rDEV_UWB3000F00 init\n\r",
+			(uint16_t) strlen("\n\rDEV_UWB3000F00 init\n\r"),
+			HAL_MAX_DELAY);
+
+	HAL_GPIO_WritePin(hw.nrstPort, hw.nrstPin, GPIO_PIN_RESET);/* Target specific drive of RSTn line into DW IC low for a period. */
 	HAL_Delay(1);
-	HAL_GPIO_WritePin(hw->nrstPort, hw->nrstPin, GPIO_PIN_SET);
+	HAL_GPIO_WritePin(hw.nrstPort, hw.nrstPin, GPIO_PIN_SET);
 	if (tag_init(&defatult_dwt_config, &defatult_dwt_txconfig, &dwt_local_data,
 			running_device, RATE_6M8) == 1)
 		Error_Handler();
@@ -176,28 +164,22 @@ int main(void) {
 	if (tag == NULL)
 		Error_Handler();
 
-	tag->distance.counter = 0;
-	tag->distance.last = 0;
-	tag->distance.error_times = 0;
 	tag->readings = 0;
-	tag->distance.value = 0;
-	tag->distance.sum = 0;
 	tag->id = 0;
 
 	TAG_STATUS_t tag_status;
+	tag->id = _dwt_otpread(PARTID_ADDRESS);
+	tag->calibrateds_temperature = _dwt_otpread(VTEMP_ADDRESS);
+	tag->calibrated_battery_voltage = _dwt_otpread(VBAT_ADDRESS);
+	uint16_t read_temp_vbat = dwt_readtempvbat();
+	tag->raw_temperature = (uint8_t) (read_temp_vbat >> 8);
+	tag->raw_battery_voltage = (uint8_t) (read_temp_vbat);
+	dwt_configuresleep(DWT_RUNSAR, DWT_WAKE_WUP);
+	dwt_configuresleepcnt(4095);
 	/* Time-stamps of frames transmission/reception, expressed in device time units. */
 	/* USER CODE END 2 */
 
 	/* Infinite loop */
-	tag->id = _dwt_otpread(PARTID_ADDRESS);
-	tag->calibrateds_temperature =  _dwt_otpread(VTEMP_ADDRESS);
-	tag->calibrated_battery_voltage = _dwt_otpread(VBAT_ADDRESS);
-	uint16_t read_temp_vbat =  dwt_readtempvbat();
-	tag->raw_temperature = (uint8_t) (read_temp_vbat>>8);
-	tag->raw_battery_voltage = (uint8_t) (read_temp_vbat);
-	float temperature =  set_temperature(tag->raw_temperature);
-	float battery_voltage = dwt_convertrawvoltage(tag->raw_battery_voltage);
-
 	/* USER CODE BEGIN WHILE */
 	while (1) {
 
@@ -208,6 +190,9 @@ int main(void) {
 
 		case TAG_RX_TIMEOUT:
 			break;
+		case TAG_RX_ERROR:
+			uart_transmit_string("TAG_RX_ERROR\n\r");
+			break;
 
 		case TAG_TX_ERROR:
 			uart_transmit_string("TAG_TX_ERROR\n\r");
@@ -216,13 +201,24 @@ int main(void) {
 			tag->readings++;
 			debug(tag);
 			break;
-
 		case TAG_SLEEP:
 			tag->readings++;
 			debug(tag);
 			tag->readings = 0;
-			HAL_Delay(10000);
+
+//			HAL_GPIO_WritePin(WAKEUP_GPIO_Port, WAKEUP_Pin, GPIO_PIN_RESET);
+//			HAL_Delay(1);
+//			HAL_GPIO_WritePin(WAKEUP_GPIO_Port, WAKEUP_Pin, GPIO_PIN_SET);
+
+			HAL_GPIO_WritePin(hw.nrstPort, hw.nrstPin, GPIO_PIN_RESET);/* Target specific drive of RSTn line into DW IC low for a period. */
+			HAL_Delay(5000);
+			HAL_GPIO_WritePin(hw.nrstPort, hw.nrstPin, GPIO_PIN_SET);
+			if (tag_init(&defatult_dwt_config, &defatult_dwt_txconfig,
+					&dwt_local_data, running_device, RATE_6M8) == 1)
+				Error_Handler();
 			break;
+		case TAG_WAKE_UP:
+			dwt_restoreconfig();
 		default:
 			break;
 
@@ -390,7 +386,6 @@ static void MX_TIM4_Init(void) {
  * @param None
  * @retval None
  */
-uint8_t recvChar;
 static void MX_USART1_UART_Init(void) {
 
 	/* USER CODE BEGIN USART1_Init 0 */
@@ -444,6 +439,9 @@ static void MX_GPIO_Init(void) {
 	/*Configure GPIO pin Output Level */
 	HAL_GPIO_WritePin(SPI2_CS_GPIO_Port, SPI2_CS_Pin, GPIO_PIN_SET);
 
+	/*Configure GPIO pin Output Level */
+	HAL_GPIO_WritePin(WAKEUP_GPIO_Port, WAKEUP_Pin, GPIO_PIN_RESET);
+
 	/*Configure GPIO pins : DW3000_RST_Pin DW3000_RST_RCV_Pin */
 	GPIO_InitStruct.Pin = DW3000_RST_Pin | DW3000_RST_RCV_Pin;
 	GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
@@ -472,6 +470,13 @@ static void MX_GPIO_Init(void) {
 	GPIO_InitStruct.Pull = GPIO_PULLUP;
 	GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_HIGH;
 	HAL_GPIO_Init(SPI2_CS_GPIO_Port, &GPIO_InitStruct);
+
+	/*Configure GPIO pin : WAKEUP_Pin */
+	GPIO_InitStruct.Pin = WAKEUP_Pin;
+	GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
+	GPIO_InitStruct.Pull = GPIO_NOPULL;
+	GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
+	HAL_GPIO_Init(WAKEUP_GPIO_Port, &GPIO_InitStruct);
 
 	/* USER CODE BEGIN MX_GPIO_Init_2 */
 	/* USER CODE END MX_GPIO_Init_2 */

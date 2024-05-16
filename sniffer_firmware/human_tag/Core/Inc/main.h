@@ -75,6 +75,8 @@ void Error_Handler(void);
 #define SPI2_CS_GPIO_Port GPIOB
 #define DW3000_RST_RCV_Pin GPIO_PIN_8
 #define DW3000_RST_RCV_GPIO_Port GPIOA
+#define WAKEUP_Pin GPIO_PIN_3
+#define WAKEUP_GPIO_Port GPIOB
 
 /* USER CODE BEGIN Private defines */
 

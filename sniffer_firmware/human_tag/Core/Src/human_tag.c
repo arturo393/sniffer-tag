@@ -7,156 +7,77 @@
 
 #include <human_tag.h>
 
+#define TX_BUFFER_SIZE (sizeof(uint8_t) + 3 * sizeof(uint32_t) + 4 * sizeof(uint8_t))
+
 TAG_STATUS_t handle_human_tag(TAG_t *tag) {
 	TAG_STATUS_t status_reg = 0;
+	uint8_t tx_buffer_size = TX_BUFFER_SIZE;
+	uint8_t tx_buffer[TX_BUFFER_SIZE] = { 0 };
+	int index = 0;
+	tx_buffer[index++] = tag->command;
+	*(uint32_t*) (tx_buffer + index) = tag->id;
+	index += sizeof(uint32_t);
+	*(uint32_t*) (tx_buffer + index) = 0;
+	index += sizeof(uint32_t);
+	*(uint32_t*) (tx_buffer + index) = 0;
+	index += sizeof(uint32_t);
+	tx_buffer[index++] = tag->raw_battery_voltage;
+	tx_buffer[index++] = tag->calibrated_battery_voltage;
+	tx_buffer[index++] = tag->raw_temperature;
+	tx_buffer[index++] = tag->calibrateds_temperature;
+
 	start_tag_reception_inmediate(0, 0);
 	status_reg = wait_rx_data();
 	if (status_reg != TAG_RX_CRC_VALID)
 		return (status_reg);
 
-	uint8_t *rx_buffer;
-	uint32_t rx_buffer_size = 0;
-	/* A frame has been received, read it into the local buffer. */
-	rx_buffer_size = allocate_and_read_received_frame(&rx_buffer);
+	uint32_t rx_buffer_size = dwt_read32bitreg(RX_FINFO_ID) & FRAME_LEN_MAX_EX;
+	uint8_t rx_buffer[3];
+	if (rx_buffer_size > 0) {
+		dwt_readrxdata(rx_buffer, (uint16_t) rx_buffer_size, 0);
+	}
+
 	if (rx_buffer_size == 0)
 		return (TAG_RX_DATA_ZERO);
 	tag->command = rx_buffer[0];
-	TX_BUFFER_t tx;
-	switch (tag->command) {
-	case TAG_TIMESTAMP_QUERY:
-		// Initialize a TX_BUFFER_t instance
-		tx.buffer = NULL;
-		tx.buffer_size = 0;
-		tx.delay = RESP_TX_TO_FINAL_RX_DLY_UUS_6M8;
-		tx.rx_timeout = FINAL_RX_TIMEOUT_UUS_6M8;
-		tx.preamble_timeout = PRE_TIMEOUT_6M8;
-		tx.buffer_size = create_message_and_alloc_buffer(&tx,tag);
-		if (start_transmission_delayed_with_response_expected(tx) == DWT_ERROR) {
-			free(tx.buffer);
-			free(rx_buffer);
+	if (tag->command == TAG_TIMESTAMP_QUERY
+			|| tag->command == TAG_SET_SLEEP_MODE) {
+		uint64_t poll_rx_timestamp = get_rx_timestamp_u64();
+
+		/** Set send time for response */
+		uint32_t resp_tx_time = (uint32_t) ((poll_rx_timestamp
+				+ ((POLL_RX_TO_RESP_TX_DLY_UUS_6M8) * UUS_TO_DWT_TIME))
+				>> RESPONSE_TX_TIME_SHIFT_AMOUNT);
+		dwt_setdelayedtrxtime(resp_tx_time);
+
+		/** Calculate the response TX timestamp */
+		uint64_t resp_tx_timestamp =
+				(((uint64_t) (resp_tx_time & RESPONSE_TX_TIME_MASK_VALUE))
+						<< RESPONSE_TX_TIME_SHIFT_AMOUNT) + TX_ANT_DLY_LP;
+		/** Calculate the size needed for the response message buffer */
+		int index = 0;
+		index++;
+		index += sizeof(uint32_t);
+		*(uint32_t*) (tx_buffer + index) = poll_rx_timestamp;
+		index += sizeof(uint32_t);
+		*(uint32_t*) (tx_buffer + index) = resp_tx_timestamp;
+
+		tag->poll_rx_timestamp = poll_rx_timestamp;
+		tag->resp_tx_timestamp = resp_tx_timestamp;
+
+		if (dwt_writetxdata(tx_buffer_size, tx_buffer, 0) == DWT_ERROR) /* Zero offset in TX buffer. */
 			return (TAG_TX_ERROR);
-		}
-
-		tag->resp_tx_timestamp = (uint32_t) tx.resp_tx_timestamp;
-		tag->poll_rx_timestamp = (uint32_t) tx.poll_rx_timestamp;
-		free(tx.buffer);
-		free(rx_buffer);
-		return (TAG_OK);
-		break;
-
-	case TAG_SET_SLEEP_MODE:
-		tx.buffer = NULL;
-		tx.buffer_size = 0;
-		tx.delay = RESP_TX_TO_FINAL_RX_DLY_UUS_6M8;
-		tx.rx_timeout = FINAL_RX_TIMEOUT_UUS_6M8;
-		tx.preamble_timeout = PRE_TIMEOUT_6M8;
-		tx.buffer_size = create_message_and_alloc_buffer(&tx,tag);
-		if (start_transmission_delayed_with_response_expected(tx) == DWT_ERROR) {
-			free(tx.buffer);
-			free(rx_buffer);
+		dwt_writetxfctrl(tx_buffer_size + 2, 0, 1);
+		/*DWT_START_TX_DELAYED DWT_START_TX_IMMEDIATE*/
+		if (dwt_starttx(DWT_START_TX_DELAYED) == DWT_ERROR)
 			return (TAG_TX_ERROR);
-		}
 
-		free(tx.buffer);
-		free(rx_buffer);
-		return (TAG_SLEEP);
-		break;
-	default:
-		free(rx_buffer);
-		return (TAG_RX_COMMAND_ERROR);
+		if (tag->command == TAG_TIMESTAMP_QUERY)
+			return (TAG_OK);
+		else if (tag->command == TAG_SET_SLEEP_MODE)
+			return (TAG_SLEEP);
 	}
-
-	return (TAG_OK);
-}
-
-double calculate_distance_human_tag(uint8_t *rx_buffer, Distance_t *distance) {
-	uint32_t poll_tx_ts;
-	uint32_t resp_rx_ts;
-	uint32_t final_tx_ts;
-	uint32_t poll_rx_ts_32;
-	uint32_t resp_tx_ts_32;
-	uint32_t final_rx_ts_32;
-	double Ra;
-	double Rb;
-	double Da;
-	double Db;
-	int64_t tof_dtu;
-	uint64_t final_rx_timestamp;
-	uint64_t resp_tx_timestamp;
-	uint64_t poll_rx_timestamp;
-
-	/* Retrieve response transmission and final reception timestamps. */
-	resp_tx_timestamp = get_tx_timestamp_u64();
-	final_rx_timestamp = get_rx_timestamp_u64();
-
-	/* Get timestamps embedded in the final message. */
-	final_msg_get_ts(&rx_buffer[FINAL_MSG_POLL_TX_TS_IDX], &poll_tx_ts);
-	final_msg_get_ts(&rx_buffer[FINAL_MSG_RESP_RX_TS_IDX], &resp_rx_ts);
-	final_msg_get_ts(&rx_buffer[FINAL_MSG_FINAL_TX_TS_IDX], &final_tx_ts);
-
-	/* Compute time of flight. 32-bit subtractions give correct answers even if clock has wrapped. See NOTE 12 below. */
-
-	poll_rx_ts_32 = (uint32_t) poll_rx_timestamp;
-	resp_tx_ts_32 = (uint32_t) resp_tx_timestamp;
-	final_rx_ts_32 = (uint32_t) final_rx_timestamp;
-	Ra = (double) (resp_rx_ts - poll_tx_ts);
-	Rb = (double) (final_rx_ts_32 - resp_tx_ts_32);
-	Da = (double) (final_tx_ts - resp_rx_ts);
-	Db = (double) (resp_tx_ts_32 - poll_rx_ts_32);
-	tof_dtu = (int64_t) ((Ra * Rb - Da * Db) / (Ra + Rb + Da + Db));
-
-	double tof;
-	tof = (double) tof_dtu * DWT_TIME_UNITS;
-	distance->value = tof * SPEED_OF_LIGHT;
-	distance_moving_average(distance);
-	return (distance->value);
-}
-
-double calculate_tag_distance(uint8_t *rx_buffer, Distance_t *distance) {
-	uint32_t poll_rx_ts;
-	uint32_t resp_tx_ts;
-	uint64_t poll_tx_timestamp;
-	uint64_t resp_rx_timestamp;
-	uint64_t final_tx_timestamp;
-	int32_t rtd_init;
-	uint32_t rtd_resp;
-	float clockOffsetRatio;
-	uint32_t final_tx_time;
-
-	/* Retrieve poll transmission and response reception timestamp. */
-	poll_tx_timestamp = get_tx_timestamp_u64();
-	resp_rx_timestamp = get_rx_timestamp_u64();
-	final_tx_time = (resp_rx_timestamp
-			+ (RESP_RX_TO_FINAL_TX_DLY_UUS_6M8 * UUS_TO_DWT_TIME)) >> 8;
-
-	dwt_setdelayedtrxtime(final_tx_time);
-
-	/* Final TX timestamp is the transmission time we programmed plus the TX antenna delay. */
-	final_tx_timestamp = (((uint64_t) (final_tx_time & 0xFFFFFFFEUL)) << 8)
-			+ TX_ANT_DLY_HP;
-
-	/*  Read carrier integrator value and calculate clock offset ratio. See NOTE 11 below. */
-	clockOffsetRatio = ((float) dwt_readclockoffset()) / (uint32_t) (1 << 26);
-
-	/* Get timestamps embedded in response message. */
-	poll_rx_ts = *(uint32_t*) (rx_buffer + 1);
-	resp_tx_ts = *(uint32_t*) (rx_buffer + 1 + 4);
-
-	//resp_msg_get_ts(&rx_buffer[FINAL_MSG_POLL_TX_TS_IDX], &poll_rx_ts);
-	//resp_msg_get_ts(&rx_buffer[FINAL_MSG_RESP_RX_TS_IDX], &resp_tx_ts);
-
-	/* Compute time of flight and distance, using clock offset ratio to correct for differing local and remote clock rates */
-	rtd_init = resp_rx_timestamp - poll_tx_timestamp;
-	rtd_resp = resp_tx_ts - poll_rx_ts;
-
-	/* Hold copies of computed time of flight and distance here for reference so that it can be examined at a debug breakpoint. */
-	double tof;
-	tof = ((rtd_init - rtd_resp * (1 - clockOffsetRatio)) / 2.0)
-			* DWT_TIME_UNITS;
-	distance->value = tof * SPEED_OF_LIGHT;
-	//The data were smoothed and filtered
-	distance_moving_average(distance);
-	return (distance->value);
+	return (TAG_RX_COMMAND_ERROR);
 }
 
 TAG_STATUS_t send_message_with_timestamps() {
@@ -275,43 +196,6 @@ uint8_t read_human_tag_first_message(uint8_t *rx_buffer) {
 
 }
 
-double distance_moving_average(Distance_t *distance) {
-	/*The data were smoothed and filtered */
-	if (distance->counter < 10) {
-		distance->readings[distance->counter] = distance->value;
-		distance->counter++;
-		distance->sum = 0;
-		for (int i = 0; i < distance->counter; i++) {
-			distance->sum += distance->readings[i];
-		}
-		distance->value = distance->sum / (double) distance->counter;
-	} else {
-		if (fabs(distance->value - distance->last) < MAX_DISTANCE_ERROR) {
-			distance->error_times = 0;
-			for (int i = 0; i < distance->counter - 1; i++) {
-				distance->new[i] = distance->readings[i + 1];
-			}
-			distance->new[distance->counter - 1] = distance->value;
-			distance->sum = 0;
-			for (int i = 0; i < distance->counter; i++) {
-				distance->sum += distance->new[i];
-				distance->readings[i] = distance->new[i];
-			}
-			distance->last = distance->value;
-			distance->value = distance->sum / (double) distance->counter;
-		} else {
-			distance->value = distance->last;
-			distance->error_times++;
-			if (distance->error_times > 20) {
-				distance->error_times = 0;
-				distance->counter = 0;
-			}
-		}
-	}
-
-	return (distance->value);
-}
-
 void uart_transmit_hexa_to_text(uint8_t *message, uint8_t size) {
 	uint8_t *hexa_text = (uint8_t*) malloc(sizeof(uint8_t) * size);
 	for (int i = 0; i < size; i++) {
@@ -394,7 +278,7 @@ int uart_transmit_string(char *message) {
 	return (2);
 }
 
-uint32_t create_message_and_alloc_buffer(TX_BUFFER_t  *tx,TAG_t *tag) {
+uint32_t create_message_and_alloc_buffer(TX_BUFFER_t *tx, TAG_t *tag) {
 	uint32_t resp_tx_time = 0;
 	uint64_t resp_tx_timestamp = 0;
 	uint64_t poll_rx_timestamp = 0;
@@ -413,7 +297,8 @@ uint32_t create_message_and_alloc_buffer(TX_BUFFER_t  *tx,TAG_t *tag) {
 			(((uint64_t) (resp_tx_time & RESPONSE_TX_TIME_MASK_VALUE))
 					<< RESPONSE_TX_TIME_SHIFT_AMOUNT) + TX_ANT_DLY_LP;
 	/** Calculate the size needed for the response message buffer */
-	tx->buffer_size = sizeof(uint8_t) + 3 * sizeof(uint32_t)+4*sizeof(uint8_t);
+	tx->buffer_size = sizeof(uint8_t) + 3 * sizeof(uint32_t)
+			+ 4 * sizeof(uint8_t);
 
 	/** Allocate memory for the response message buffer */
 	tx->buffer = (uint8_t*) malloc(tx->buffer_size);
@@ -432,19 +317,18 @@ uint32_t create_message_and_alloc_buffer(TX_BUFFER_t  *tx,TAG_t *tag) {
 	*(uint32_t*) (tx->buffer + 1 + sizeof(uint32_t)) = poll_rx_timestamp;
 
 	// Write resp_tx_timestamp to the buffer
-	*(uint32_t*) (tx->buffer + 1 + 2*sizeof(uint32_t)) =
-			resp_tx_timestamp;
+	*(uint32_t*) (tx->buffer + 1 + 2 * sizeof(uint32_t)) = resp_tx_timestamp;
 	// Write resp_tx_timestamp to the buffer
-	*(uint8_t*) (tx->buffer + 1 + 3* sizeof(uint32_t)) =
+	*(uint8_t*) (tx->buffer + 1 + 3 * sizeof(uint32_t)) =
 			tag->raw_battery_voltage;
 	// Write resp_tx_timestamp to the buffer
-	*(uint8_t*) (tx->buffer + 1 + 3*sizeof(uint32_t) + sizeof(uint8_t)) =
+	*(uint8_t*) (tx->buffer + 1 + 3 * sizeof(uint32_t) + sizeof(uint8_t)) =
 			tag->calibrated_battery_voltage;
 	// Write resp_tx_timestamp to the buffer
-	*(uint8_t*) (tx->buffer + 1 + 3*sizeof(uint32_t) + 2*sizeof(uint8_t)) =
+	*(uint8_t*) (tx->buffer + 1 + 3 * sizeof(uint32_t) + 2 * sizeof(uint8_t)) =
 			tag->raw_temperature;
 	// Write resp_tx_timestamp to the buffer
-	*(uint8_t*) (tx->buffer + 1 + 3*sizeof(uint32_t) + 3*sizeof(uint8_t)) =
+	*(uint8_t*) (tx->buffer + 1 + 3 * sizeof(uint32_t) + 3 * sizeof(uint8_t)) =
 			tag->calibrateds_temperature;
 
 	tx->poll_rx_timestamp = poll_rx_timestamp;
@@ -545,15 +429,21 @@ void debug(TAG_t *tag) {
 	/* Calculate the size needed for the formatted string */
 	uint8_t dist_str[150] = { 0 };
 	int size =
-	sprintf(dist_str,
-			"{ID: %lu} , {command: %d} , {times: %lu} , {poll_rx_timestamp: %lu} , {resp_tx_timestamp: %lu} , {distance: %.2f}\n\r",
-			(unsigned long) tag->id,
-			(int) tag->command,
-			(unsigned long) tag->readings,
-			(unsigned long) tag->poll_rx_timestamp,
-			(unsigned long) tag->resp_tx_timestamp,
-			tag->distance.value);
+			sprintf(dist_str,
+					"{ID: %lu} , {command: %d} , {times: %lu} , {poll_rx_timestamp: %lu} , {resp_tx_timestamp: %lu} ,\n\r",
+					(unsigned long) tag->id, (int) tag->command,
+					(unsigned long) tag->readings,
+					(unsigned long) tag->poll_rx_timestamp,
+					(unsigned long) tag->resp_tx_timestamp);
 	/* Transmit the formatted string */
 	HAL_UART_Transmit(&huart1, (uint8_t*) dist_str, (uint16_t) size,
 	HAL_MAX_DELAY);
+}
+
+void sleep_config(uint16_t sleep_mode, uint16_t mode, uint8_t wake) {
+	// Add predefined sleep settings before writing the mode
+	sleep_mode |= mode;
+	dwt_write16bitoffsetreg(AON_DIG_CFG_ID, 0, pdw3000local->sleep_mode);
+
+	dwt_write8bitoffsetreg(ANA_CFG_ID, 0, wake); //bit 0 - SLEEP_EN, bit 1 - DEEP_SLEEP=0/SLEEP=1, bit 3 wake on CS
 }

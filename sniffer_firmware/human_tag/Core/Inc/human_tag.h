@@ -19,16 +19,7 @@ extern UART_HandleTypeDef huart1;
 #define INITIAL_COMUNICATION_DATA_SIZE 5
 #define RESPONSE_TX_TIME_MASK_VALUE 0xFFFFFFFEUL
 #define RESPONSE_TX_TIME_SHIFT_AMOUNT 8
-typedef struct {
-	double tof;
-	double value;
-	double readings[DISTANCE_READINGS];
-	double new[DISTANCE_READINGS];
-	double sum;
-	double last;
-	uint8_t error_times;
-	uint8_t counter;
-} Distance_t;
+
 
 typedef struct {
 	uint32_t id;
@@ -38,9 +29,9 @@ typedef struct {
 	uint8_t raw_temperature; // IC temp read during production and stored in OTP (Tmeas @ 23C)
 	uint8_t calibrated_battery_voltage; // IC V bat read during production and stored in OTP (Vmeas @ 3V3)
 	uint8_t calibrateds_temperature; // IC temp read during production and stored in OTP (Tmeas @ 23C)
-	Distance_t distance;
 	uint32_t resp_tx_timestamp;
 	uint32_t poll_rx_timestamp;
+	uint32_t resp_tx_time;
 } TAG_t;
 
 typedef struct buffer {
@@ -64,6 +55,7 @@ typedef enum{
 	TAG_RX_COMMAND_ERROR,
 	TAG_TX_ERROR,
 	TAG_SLEEP,
+	TAG_WAKE_UP,
 
 }TAG_STATUS_t;
 
@@ -71,13 +63,10 @@ typedef enum{
 #define TAG_SET_SLEEP_MODE 0x12
 TAG_STATUS_t handle_sniffer_tag(TAG_t *tag);
 TAG_STATUS_t handle_human_tag(TAG_t *tag);
-double calculate_distance_human_tag(uint8_t *rx_buffer, Distance_t *distance);
-double calculate_tag_distance(uint8_t *rx_buffer, Distance_t *distance);
 TAG_STATUS_t send_message_with_timestamps();
 uint32_t send_response_with_timestamps(uint8_t *tx_resp_msg, uint8_t size,
 		uint32_t frame_seq_nb);
 uint8_t read_human_tag_first_message(uint8_t *rx_buffer);
-double distance_moving_average(Distance_t *distance);
 void uart_transmit_hexa_to_text(uint8_t *message,
 		uint8_t size);
 void uart_transmit_float_to_text(float distanceValue);

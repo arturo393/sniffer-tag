@@ -458,7 +458,7 @@ typedef enum {
 #define DWT_BROUT_EN     0x4                        // enable brownout detector during sleep/deep sleep
 #define DWT_SLEEP        0x2                        // enable sleep (if this bit is clear the device will enter deep sleep)
 #define DWT_SLP_EN       0x1                        // enable sleep/deep sleep functionality
-
+#define DWT_WAKE_CNT     0x02
 //DW3000 IDLE/INIT mode definitions
 #define DWT_DW_INIT      0x0
 #define DWT_DW_IDLE      0x1
@@ -900,7 +900,7 @@ typedef struct {
 
 
 
-extern SPI_HW_t *hw;
+extern SPI_HW_t hw;
 extern dwt_local_data_t *pdw3000local;
 extern dwt_config_t *config_options;
 
@@ -982,4 +982,10 @@ uint16_t dwt_readtempvbat(void);
 float set_temperature(uint8_t raw_temp);
 float dwt_convertrawvoltage(uint8_t raw_voltage);
 
+/* sleep api*/
+void dwt_entersleepaftertx(int enable);
+void dwt_restoreconfig(void);
+void dwt_configuresleep(uint16_t mode, uint8_t wake);
+void dwt_configuresleepcnt(uint16_t sleepcnt);
+void dwt_entersleep(int idle_rc);
 #endif /* INC_TAG_C_ */

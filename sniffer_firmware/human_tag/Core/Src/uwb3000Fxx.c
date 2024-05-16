@@ -5024,9 +5024,9 @@ HAL_StatusTypeDef write(uint16_t headerLength, uint8_t *headerBuffer,
 	for (j = 0; j < bodylength; j++)
 		buf[i + j] = bodyBuffer[j];
 
-	HAL_GPIO_WritePin(hw->nssPort, hw->nssPin, GPIO_PIN_RESET); // pull the pin low
-	res = HAL_SPI_Transmit(hw->spi, buf, i + j, 0xffff);
-	HAL_GPIO_WritePin(hw->nssPort, hw->nssPin, GPIO_PIN_SET); // pull the pin high
+	HAL_GPIO_WritePin(hw.nssPort, hw.nssPin, GPIO_PIN_RESET); // pull the pin low
+	res = HAL_SPI_Transmit(hw.spi, buf, i + j, 0xffff);
+	HAL_GPIO_WritePin(hw.nssPort, hw.nssPin, GPIO_PIN_SET); // pull the pin high
 
 	return (res);
 }
@@ -5034,12 +5034,12 @@ HAL_StatusTypeDef write(uint16_t headerLength, uint8_t *headerBuffer,
 HAL_StatusTypeDef read(uint16_t headerLength, const uint8_t *headerBuffer,
 		uint32_t readlength, uint8_t *readBuffer) {
 	HAL_StatusTypeDef res;
-	HAL_GPIO_WritePin(hw->nssPort, hw->nssPin, GPIO_PIN_RESET); // pull the pin low
-	res = HAL_SPI_Transmit(hw->spi, (uint8_t*) headerBuffer, headerLength,
+	HAL_GPIO_WritePin(hw.nssPort, hw.nssPin, GPIO_PIN_RESET); // pull the pin low
+	res = HAL_SPI_Transmit(hw.spi, (uint8_t*) headerBuffer, headerLength,
 			0xffff);
 	if (res == HAL_OK)
-		res = HAL_SPI_Receive(hw->spi, readBuffer, readlength, 0xffff);
-	HAL_GPIO_WritePin(hw->nssPort, hw->nssPin, GPIO_PIN_SET); // pull the pin high
+		res = HAL_SPI_Receive(hw.spi, readBuffer, readlength, 0xffff);
+	HAL_GPIO_WritePin(hw.nssPort, hw.nssPin, GPIO_PIN_SET); // pull the pin high
 	return (res);
 }
 
