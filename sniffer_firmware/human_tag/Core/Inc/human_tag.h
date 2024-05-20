@@ -20,6 +20,7 @@ extern UART_HandleTypeDef huart1;
 #define RESPONSE_TX_TIME_MASK_VALUE 0xFFFFFFFEUL
 #define RESPONSE_TX_TIME_SHIFT_AMOUNT 8
 
+extern char *TAG_MESSAGES[];
 
 typedef struct {
 	uint32_t id;
@@ -45,7 +46,6 @@ typedef struct buffer {
 } TX_BUFFER_t;
 
 typedef enum{
-	TAG_OK,
 	TAG_NO_RESPONSE,
 	TAG_NO_RXCG_DETECTED,
 	TAG_RX_TIMEOUT,
@@ -56,13 +56,20 @@ typedef enum{
 	TAG_TX_ERROR,
 	TAG_SLEEP,
 	TAG_WAKE_UP,
+	TAG_WAIT_FOR_FIRST_DETECTION,
+	TAG_WAIT_FOR_TIMESTAMPT_QUERY,
+	TAG_UNKNOWN
 
 }TAG_STATUS_t;
-
+#define TX_BUFFER_SIZE (sizeof(uint8_t) + 3 * sizeof(uint32_t) + 4 * sizeof(uint8_t))
 #define TAG_TIMESTAMP_QUERY 0x11
 #define TAG_SET_SLEEP_MODE 0x12
-TAG_STATUS_t handle_sniffer_tag(TAG_t *tag);
-TAG_STATUS_t handle_human_tag(TAG_t *tag);
+#define TAG_ID_QUERY 0x13
+#define WAIT_FOR_TIMESTAMP_QUERY_TIMEOUT_MS 2000 // Timeout for transitioning from WAIT_FOR_TIMESTAMP_QUERY to WAIT_FOR_FIRST_DETECTION state in milliseconds
+
+TAG_STATUS_t tag_discovery(TAG_t *tag);
+TAG_STATUS_t process_queried_tag_information(TAG_t *tag);
+TAG_STATUS_t process_first_tag_information(TAG_t *tag);
 TAG_STATUS_t send_message_with_timestamps();
 uint32_t send_response_with_timestamps(uint8_t *tx_resp_msg, uint8_t size,
 		uint32_t frame_seq_nb);
@@ -77,6 +84,6 @@ TAG_STATUS_t wait_rx_data();
 uint32_t allocate_and_read_received_frame(uint8_t **rx_buffer);
 uint32_t create_message_and_alloc_buffer(TX_BUFFER_t *tx,TAG_t *tag);
 int start_transmission_delayed_with_response_expected(TX_BUFFER_t tx);
-void debug(TAG_t *tag);
+void debug(TAG_t *tag,TAG_STATUS_t status);
 #endif /* INC_HUMAN_TAG_H_ */
 

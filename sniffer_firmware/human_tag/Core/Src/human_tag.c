@@ -7,24 +7,75 @@
 
 #include <human_tag.h>
 
-#define TX_BUFFER_SIZE (sizeof(uint8_t) + 3 * sizeof(uint32_t) + 4 * sizeof(uint8_t))
+char *TAG_MESSAGES[] = { "NO_RESPONSE", "NO_RXCG_DETECTED", "RX_TIMEOUT",
+		"RX_CRC_VALID", "RX_ERROR", "RX_DATA_ZERO", "RX_COMMAND_ERROR",
+		"TX_ERROR", "SLEEP", "WAKE_UP", "WAIT_FOR_FIRST_DETECTION",
+		"WAIT_FOR_TIMESTAMP_QUERY" };
 
-TAG_STATUS_t handle_human_tag(TAG_t *tag) {
+TAG_STATUS_t process_first_tag_information(TAG_t *tag) {
 	TAG_STATUS_t status_reg = 0;
+	tag->command = TAG_ID_QUERY;
+
+	start_tag_reception_inmediate(0, 0);
+	status_reg = wait_rx_data();
+	if (status_reg != TAG_RX_CRC_VALID)
+		return (status_reg);
+
+	uint32_t rx_buffer_size = dwt_read32bitreg(RX_FINFO_ID) & FRAME_LEN_MAX_EX;
+	if (rx_buffer_size == 0)
+		return (TAG_RX_DATA_ZERO);
+
+	uint8_t rx_buffer[3];
+	dwt_readrxdata(rx_buffer, (uint16_t) rx_buffer_size, 0);
+
+	uint8_t received_command = rx_buffer[0];
+
+	if (tag->command != received_command)
+		return (TAG_RX_COMMAND_ERROR);
+
+	tag->poll_rx_timestamp = get_rx_timestamp_u64();
+	/** Set send time for response */
+	uint32_t resp_tx_time = (uint32_t) ((tag->poll_rx_timestamp
+			+ ((POLL_RX_TO_RESP_TX_DLY_UUS_6M8) * UUS_TO_DWT_TIME))
+			>> RESPONSE_TX_TIME_SHIFT_AMOUNT);
+	dwt_setdelayedtrxtime(resp_tx_time);
+
+	/** Calculate the response TX timestamp */
+	tag->resp_tx_timestamp = (((uint64_t) (resp_tx_time
+			& RESPONSE_TX_TIME_MASK_VALUE)) << RESPONSE_TX_TIME_SHIFT_AMOUNT)
+			+ TX_ANT_DLY_LP;
+
+	/** Calculate the size needed for the response message buffer */
 	uint8_t tx_buffer_size = TX_BUFFER_SIZE;
 	uint8_t tx_buffer[TX_BUFFER_SIZE] = { 0 };
 	int index = 0;
 	tx_buffer[index++] = tag->command;
 	*(uint32_t*) (tx_buffer + index) = tag->id;
 	index += sizeof(uint32_t);
-	*(uint32_t*) (tx_buffer + index) = 0;
+	*(uint32_t*) (tx_buffer + index) = tag->poll_rx_timestamp;
 	index += sizeof(uint32_t);
-	*(uint32_t*) (tx_buffer + index) = 0;
+	*(uint32_t*) (tx_buffer + index) = tag->resp_tx_timestamp;
 	index += sizeof(uint32_t);
 	tx_buffer[index++] = tag->raw_battery_voltage;
 	tx_buffer[index++] = tag->calibrated_battery_voltage;
 	tx_buffer[index++] = tag->raw_temperature;
 	tx_buffer[index++] = tag->calibrateds_temperature;
+
+	if (dwt_writetxdata(tx_buffer_size, tx_buffer, 0) == DWT_ERROR) /* Zero offset in TX buffer. */
+		return (TAG_TX_ERROR);
+	dwt_writetxfctrl(tx_buffer_size + 2, 0, 1);
+	/*DWT_START_TX_DELAYED DWT_START_TX_IMMEDIATE*/
+	if (dwt_starttx(DWT_START_TX_DELAYED) == DWT_ERROR)
+		return (TAG_TX_ERROR);
+	//return (TAG_WAIT_FOR_FIRST_DETECTION);
+	return (TAG_WAIT_FOR_TIMESTAMPT_QUERY);
+}
+
+TAG_STATUS_t process_queried_tag_information(TAG_t *tag) {
+	TAG_STATUS_t status_reg = 0;
+	uint8_t tx_buffer_size = TX_BUFFER_SIZE;
+	uint8_t tx_buffer[TX_BUFFER_SIZE] = { 0 };
+	int index = 0;
 
 	start_tag_reception_inmediate(0, 0);
 	status_reg = wait_rx_data();
@@ -33,51 +84,48 @@ TAG_STATUS_t handle_human_tag(TAG_t *tag) {
 
 	uint32_t rx_buffer_size = dwt_read32bitreg(RX_FINFO_ID) & FRAME_LEN_MAX_EX;
 	uint8_t rx_buffer[3];
-	if (rx_buffer_size > 0) {
-		dwt_readrxdata(rx_buffer, (uint16_t) rx_buffer_size, 0);
-	}
 
 	if (rx_buffer_size == 0)
 		return (TAG_RX_DATA_ZERO);
-	tag->command = rx_buffer[0];
-	if (tag->command == TAG_TIMESTAMP_QUERY
-			|| tag->command == TAG_SET_SLEEP_MODE) {
-		uint64_t poll_rx_timestamp = get_rx_timestamp_u64();
+	dwt_readrxdata(rx_buffer, (uint16_t) rx_buffer_size, 0);
 
-		/** Set send time for response */
-		uint32_t resp_tx_time = (uint32_t) ((poll_rx_timestamp
-				+ ((POLL_RX_TO_RESP_TX_DLY_UUS_6M8) * UUS_TO_DWT_TIME))
-				>> RESPONSE_TX_TIME_SHIFT_AMOUNT);
-		dwt_setdelayedtrxtime(resp_tx_time);
+	tag->command = TAG_TIMESTAMP_QUERY;
 
-		/** Calculate the response TX timestamp */
-		uint64_t resp_tx_timestamp =
-				(((uint64_t) (resp_tx_time & RESPONSE_TX_TIME_MASK_VALUE))
-						<< RESPONSE_TX_TIME_SHIFT_AMOUNT) + TX_ANT_DLY_LP;
-		/** Calculate the size needed for the response message buffer */
-		int index = 0;
-		index++;
-		index += sizeof(uint32_t);
-		*(uint32_t*) (tx_buffer + index) = poll_rx_timestamp;
-		index += sizeof(uint32_t);
-		*(uint32_t*) (tx_buffer + index) = resp_tx_timestamp;
+	uint8_t received_command = rx_buffer[0];
+	uint32_t received_id = *(uint32_t*) (rx_buffer + 1);
+	if (tag->command != received_command && tag->id != received_id)
+		return (TAG_RX_COMMAND_ERROR);
 
-		tag->poll_rx_timestamp = poll_rx_timestamp;
-		tag->resp_tx_timestamp = resp_tx_timestamp;
+	uint64_t poll_rx_timestamp = get_rx_timestamp_u64();
 
-		if (dwt_writetxdata(tx_buffer_size, tx_buffer, 0) == DWT_ERROR) /* Zero offset in TX buffer. */
-			return (TAG_TX_ERROR);
-		dwt_writetxfctrl(tx_buffer_size + 2, 0, 1);
-		/*DWT_START_TX_DELAYED DWT_START_TX_IMMEDIATE*/
-		if (dwt_starttx(DWT_START_TX_DELAYED) == DWT_ERROR)
-			return (TAG_TX_ERROR);
+	/** Set send time for response */
+	uint32_t resp_tx_time = (uint32_t) ((poll_rx_timestamp
+			+ ((POLL_RX_TO_RESP_TX_DLY_UUS_6M8) * UUS_TO_DWT_TIME))
+			>> RESPONSE_TX_TIME_SHIFT_AMOUNT);
+	dwt_setdelayedtrxtime(resp_tx_time);
 
-		if (tag->command == TAG_TIMESTAMP_QUERY)
-			return (TAG_OK);
-		else if (tag->command == TAG_SET_SLEEP_MODE)
-			return (TAG_SLEEP);
-	}
-	return (TAG_RX_COMMAND_ERROR);
+	/** Calculate the response TX timestamp */
+	uint64_t resp_tx_timestamp = (((uint64_t) (resp_tx_time
+			& RESPONSE_TX_TIME_MASK_VALUE)) << RESPONSE_TX_TIME_SHIFT_AMOUNT)
+			+ TX_ANT_DLY_LP;
+	/** Calculate the size needed for the response message buffer */
+	index = 0;
+	tx_buffer[index++] = tag->command;
+	*(uint32_t*) (tx_buffer + index) = poll_rx_timestamp;
+	index += sizeof(uint32_t);
+	*(uint32_t*) (tx_buffer + index) = resp_tx_timestamp;
+
+	tag->poll_rx_timestamp = poll_rx_timestamp;
+	tag->resp_tx_timestamp = resp_tx_timestamp;
+
+	if (dwt_writetxdata(tx_buffer_size, tx_buffer, 0) == DWT_ERROR) /* Zero offset in TX buffer. */
+		return (TAG_TX_ERROR);
+	dwt_writetxfctrl(tx_buffer_size + 2, 0, 1);
+	/*DWT_START_TX_DELAYED DWT_START_TX_IMMEDIATE*/
+	if (dwt_starttx(DWT_START_TX_DELAYED) == DWT_ERROR)
+		return (TAG_TX_ERROR);
+
+	return (TAG_WAIT_FOR_TIMESTAMPT_QUERY);
 }
 
 TAG_STATUS_t send_message_with_timestamps() {
@@ -348,34 +396,51 @@ void start_tag_reception_inmediate(uint8_t preamble_timeout, uint8_t rx_timeout)
 	/* Poll for reception of a frame or error/timeout. See NOTE 8 below. */
 }
 
+#define RX_DATA_TIMEOUT_MS 1000 // Timeout in milliseconds
+
 TAG_STATUS_t wait_rx_data() {
-	uint32_t status_reg;
-	/* wait for crc check and (frame wait timeout and preamble detect timeout) mask. */
-	while (!((status_reg = dwt_read32bitreg(SYS_STATUS_ID))
-			& (SYS_STATUS_RXFCG_BIT_MASK | SYS_STATUS_ALL_RX_TO
-					| SYS_STATUS_ALL_RX_ERR))) {
-	};
-	/* check for any receive error*/
-	if ((status_reg & SYS_STATUS_ALL_RX_ERR)) {
-		dwt_write32bitreg(SYS_STATUS_ID, SYS_STATUS_ALL_RX_ERR);
-		return (TAG_RX_ERROR);
-	}
-	/* check for receive timeouts */
-	if ((status_reg & SYS_STATUS_ALL_RX_TO)) {
-		dwt_write32bitreg(SYS_STATUS_ID, SYS_STATUS_ALL_RX_TO);
-		return (TAG_RX_TIMEOUT);
-	}
-	if ((status_reg & SYS_STATUS_RXFCG_BIT_MASK)) {
-		/* Clear RX error/timeout events in the DW IC status register. */
-		dwt_write32bitreg(SYS_STATUS_ID,
-				SYS_STATUS_ALL_RX_TO | SYS_STATUS_ALL_RX_ERR);
-		return (TAG_RX_CRC_VALID);
-	}
+    uint32_t status_reg;
+    uint32_t start_time = HAL_GetTick(); // Get the current time in milliseconds
+    uint8_t timeout_reached = 0;
 
-	/* Clear good RX frame event in the DW IC status register. */
-	dwt_write32bitreg(SYS_STATUS_ID, SYS_STATUS_RXFCG_BIT_MASK);
+    while (!timeout_reached) {
+        if (((status_reg = dwt_read32bitreg(SYS_STATUS_ID)) & (SYS_STATUS_RXFCG_BIT_MASK | SYS_STATUS_ALL_RX_TO | SYS_STATUS_ALL_RX_ERR))) {
+            break; // Exit the loop if one of the conditions is met
+        }
 
-	return (TAG_NO_RXCG_DETECTED);
+        // Check for timeout
+        if ((HAL_GetTick() - start_time) >= RX_DATA_TIMEOUT_MS) {
+            timeout_reached = 1;
+        }
+    }
+
+    if (timeout_reached) {
+        // Handle timeout
+        return TAG_RX_TIMEOUT;
+    }
+
+    // Check for receive errors
+    if ((status_reg & SYS_STATUS_ALL_RX_ERR)) {
+        dwt_write32bitreg(SYS_STATUS_ID, SYS_STATUS_ALL_RX_ERR);
+        return TAG_RX_ERROR;
+    }
+
+    // Check for receive timeouts
+    if ((status_reg & SYS_STATUS_ALL_RX_TO)) {
+        dwt_write32bitreg(SYS_STATUS_ID, SYS_STATUS_ALL_RX_TO);
+        return TAG_RX_TIMEOUT;
+    }
+
+    if ((status_reg & SYS_STATUS_RXFCG_BIT_MASK)) {
+        // Clear RX error/timeout events in the DW IC status register
+        dwt_write32bitreg(SYS_STATUS_ID, SYS_STATUS_ALL_RX_TO | SYS_STATUS_ALL_RX_ERR);
+        return TAG_RX_CRC_VALID;
+    }
+
+    // Clear good RX frame event in the DW IC status register
+    dwt_write32bitreg(SYS_STATUS_ID, SYS_STATUS_RXFCG_BIT_MASK);
+
+    return TAG_NO_RXCG_DETECTED;
 }
 
 uint32_t allocate_and_read_received_frame(uint8_t **rx_buffer) {
@@ -425,19 +490,22 @@ int start_transmission_delayed_with_response_expected(TX_BUFFER_t tx) {
 
 }
 
-void debug(TAG_t *tag) {
-	/* Calculate the size needed for the formatted string */
-	uint8_t dist_str[150] = { 0 };
-	int size =
+void debug(TAG_t *tag, TAG_STATUS_t status) {
+	/* Format the string directly into the dynamically allocated buffer */
+	char dist_str[300] = { 0 };
+	int size = 0;
+	if (status < TAG_NO_RESPONSE || status > TAG_WAIT_FOR_TIMESTAMPT_QUERY) {
+		status = TAG_UNKNOWN;
+	}
+	size =
 			sprintf(dist_str,
-					"{ID: %lu} , {command: %d} , {times: %lu} , {poll_rx_timestamp: %lu} , {resp_tx_timestamp: %lu} ,\n\r",
-					(unsigned long) tag->id, (int) tag->command,
-					(unsigned long) tag->readings,
+					"{message: %s},{ID: 0x%08X},{command: 0x%02X },{times: %lu},{poll_rx_ts: 0x%08X },{resp_tx_ts: 0x%08X}\n\r",
+					TAG_MESSAGES[status], (unsigned long) tag->id,
+					(int) tag->command, (unsigned long) tag->readings,
 					(unsigned long) tag->poll_rx_timestamp,
 					(unsigned long) tag->resp_tx_timestamp);
-	/* Transmit the formatted string */
-	HAL_UART_Transmit(&huart1, (uint8_t*) dist_str, (uint16_t) size,
-	HAL_MAX_DELAY);
+
+	HAL_UART_Transmit(&huart1, (uint8_t*) dist_str, size, HAL_MAX_DELAY);
 }
 
 void sleep_config(uint16_t sleep_mode, uint16_t mode, uint8_t wake) {

@@ -988,4 +988,6 @@ void dwt_restoreconfig(void);
 void dwt_configuresleep(uint16_t mode, uint8_t wake);
 void dwt_configuresleepcnt(uint16_t sleepcnt);
 void dwt_entersleep(int idle_rc);
+
+void dwt_setsniffmode(int enable, uint8_t timeOn, uint8_t timeOff);
 #endif /* INC_TAG_C_ */

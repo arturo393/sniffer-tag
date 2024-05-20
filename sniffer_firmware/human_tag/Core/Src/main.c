@@ -27,7 +27,6 @@
 /* Private typedef -----------------------------------------------------------*/
 /* USER CODE BEGIN PTD */
 
-
 TAG_t *tag;
 int size = 0;
 uint8_t running_device = DEV_UWB3000F00;
@@ -166,8 +165,11 @@ int main(void) {
 
 	tag->readings = 0;
 	tag->id = 0;
+	tag->resp_tx_time = 0;
+	tag->resp_tx_timestamp = 0;
+	tag->poll_rx_timestamp = 0;
 
-	TAG_STATUS_t tag_status;
+	TAG_STATUS_t tag_status = TAG_WAIT_FOR_FIRST_DETECTION;
 	tag->id = _dwt_otpread(PARTID_ADDRESS);
 	tag->calibrateds_temperature = _dwt_otpread(VTEMP_ADDRESS);
 	tag->calibrated_battery_voltage = _dwt_otpread(VBAT_ADDRESS);
@@ -176,52 +178,41 @@ int main(void) {
 	tag->raw_battery_voltage = (uint8_t) (read_temp_vbat);
 	dwt_configuresleep(DWT_RUNSAR, DWT_WAKE_WUP);
 	dwt_configuresleepcnt(4095);
+	dwt_setsniffmode(1, 15, 100);
 	/* Time-stamps of frames transmission/reception, expressed in device time units. */
 	/* USER CODE END 2 */
 
 	/* Infinite loop */
 	/* USER CODE BEGIN WHILE */
 	while (1) {
+		if (tag_status == TAG_WAIT_FOR_FIRST_DETECTION) {
+			debug(tag,tag_status);
 
-		tag_status = handle_human_tag(tag);
-		switch (tag_status) {
-		case TAG_NO_RXCG_DETECTED:
-			break;
+			tag_status = process_first_tag_information(tag);
+			debug(tag, tag_status);
+			if (tag_status != TAG_WAIT_FOR_TIMESTAMPT_QUERY)
+				tag_status = TAG_WAIT_FOR_FIRST_DETECTION;
 
-		case TAG_RX_TIMEOUT:
-			break;
-		case TAG_RX_ERROR:
-			uart_transmit_string("TAG_RX_ERROR\n\r");
-			break;
+		} else if (tag_status == TAG_WAIT_FOR_TIMESTAMPT_QUERY) {
+			tag_status = process_queried_tag_information(tag);
 
-		case TAG_TX_ERROR:
-			uart_transmit_string("TAG_TX_ERROR\n\r");
-			break;
-		case TAG_OK:
+			if (tag_status != TAG_WAIT_FOR_TIMESTAMPT_QUERY)
+				tag_status = TAG_WAIT_FOR_TIMESTAMPT_QUERY;
+
+			debug(tag,tag_status);
+
+		} else if (tag_status == TAG_SLEEP) {
+
 			tag->readings++;
-			debug(tag);
-			break;
-		case TAG_SLEEP:
-			tag->readings++;
-			debug(tag);
+			debug(tag, tag_status);
 			tag->readings = 0;
-
-//			HAL_GPIO_WritePin(WAKEUP_GPIO_Port, WAKEUP_Pin, GPIO_PIN_RESET);
-//			HAL_Delay(1);
-//			HAL_GPIO_WritePin(WAKEUP_GPIO_Port, WAKEUP_Pin, GPIO_PIN_SET);
-
 			HAL_GPIO_WritePin(hw.nrstPort, hw.nrstPin, GPIO_PIN_RESET);/* Target specific drive of RSTn line into DW IC low for a period. */
 			HAL_Delay(5000);
 			HAL_GPIO_WritePin(hw.nrstPort, hw.nrstPin, GPIO_PIN_SET);
 			if (tag_init(&defatult_dwt_config, &defatult_dwt_txconfig,
 					&dwt_local_data, running_device, RATE_6M8) == 1)
 				Error_Handler();
-			break;
-		case TAG_WAKE_UP:
-			dwt_restoreconfig();
-		default:
-			break;
-
+			dwt_setsniffmode(1, 10, 200);
 		}
 		//HAL_Delay(1000);
 		/* USER CODE END WHILE */
