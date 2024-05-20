@@ -142,6 +142,7 @@ int main(void) {
 
 	char dist_str[100];
 	int size;
+	//TAG_Node *tag_list = NULL;
 	hw_a = malloc(sizeof(SPI_HW_t));
 	if (hw_a == NULL)
 		Error_Handler();
@@ -205,72 +206,74 @@ int main(void) {
 	float temp2 = temperature + battery_voltage;
 	temp2++;
 
+	uint32_t lora_send_timeout = 5000;
+	uint32_t lora_send_ticks = HAL_GetTick();
+	tag_status = TAG_DISCOVERY;
+
+
 	/* Time-stamps of frames transmission/reception, expressed in device time units. */
 	/* USER CODE END 2 */
 
 	/* Infinite loop */
 	/* USER CODE BEGIN WHILE */
+
 	while (1) {
+		if (tag_status == TAG_DISCOVERY) {
 
-		tag_status = handle_sniffer_tag(tag);
-
-		switch (tag_status) {
-		case TAG_NO_RXCG_DETECTED:
-			HAL_UART_Transmit(&huart1, (uint8_t*) "TAG_NO_RXCG_DETECTED\r",
-					strlen("TAG_NO_RXCG_DETECTED\r"), HAL_MAX_DELAY);
-			break;
-		case TAG_RX_FRAME_TIMEOUT:
-			HAL_UART_Transmit(&huart1, (uint8_t*) "TAG_RX_FRAME_TIMEOUT\r",
-					strlen("TAG_RX_FRAME_TIMEOUT\r"), HAL_MAX_DELAY);
-			break;
-			break;
-		case TAG_RX_PREAMBLE_DETECTION_TIMEOUT:
-			HAL_UART_Transmit(&huart1,
-					(uint8_t*) "TAG_RX_PREAMBLE_DETECTION_TIMEOUT\r",
-					strlen("TAG_RX_PREAMBLE_DETECTION_TIMEOUT\r"),
-					HAL_MAX_DELAY);
-			dwt_write32bitreg(SYS_STATUS_ID,
-					SYS_STATUS_ALL_RX_TO | SYS_STATUS_ALL_RX_ERR | SYS_STATUS_TXFRS_BIT_MASK);
-			break;
-		case TAG_RX_CRC_VALID:
-			break;
-		case TAG_RX_ERROR:
-			HAL_UART_Transmit(&huart1, (uint8_t*) "TAG_RX_ERROR\r",
-					strlen("TAG_RX_ERROR\r"), HAL_MAX_DELAY);
-			break;
-		case TAG_RX_DATA_ZERO:
-			break;
-		case TAG_NO_RESPONSE:
-			break;
-		case TAG_OK:
-			break;
-		case TAG_END_READINGS:
-
-			set_battery_voltage(&(tag->battery_voltage));
-			set_temperature(&(tag->temperature));
-			debug(tag);
-			reset_TAG_values(tag);
-			break;
-		case TAG_HUMAN_DISTANCE_OK:
-			tag->readings++;
-			if (tag->readings == DISTANCE_READINGS) {
-				tag->readings = 0;
+			if (hw == hw_a) {
+				hw = hw_b;
+				tag->distance = &(tag->distance_b);
+			} else {
+				hw = hw_a;
+				tag->distance = &(tag->distance_a);
 			}
 
-			break;
-		case TAG_RX_NO_COMMAND:
-			HAL_UART_Transmit(&huart1, (uint8_t*) "TAG_RX_NO_COMMAND\r",
-					strlen("TAG_RX_NO_COMMAND\r"), HAL_MAX_DELAY);
-			break;
-		case TAG_TX_ERROR:
-			HAL_UART_Transmit(&huart1, (uint8_t*) "TAG_TX_ERROR\r",
-					strlen("TAG_TX_ERROR\r"), HAL_MAX_DELAY);
-			break;
+			tag_status = tag_discovery(tag);
 
-		default:
+			if (tag_status != TAG_SEND_TIMESTAMP_QUERY)
+				tag_status = TAG_DISCOVERY;
+			set_battery_voltage(&(tag->battery_voltage));
+			set_temperature(&(tag->temperature));
+			debug(tag, tag_status);
 
-			break;
+		} else if (tag_status == TAG_SEND_TIMESTAMP_QUERY) {
+			if (tag->readings < DISTANCE_READINGS) {
+				if (hw == hw_a) {
+					hw = hw_b;
+					tag->distance = &(tag->distance_b);
+				} else {
+					hw = hw_a;
+					tag->distance = &(tag->distance_a);
+				}
+				tag->command = TAG_TIMESTAMP_QUERY;
+			}
+			if (tag->readings == DISTANCE_READINGS) {
+				tag->command = TAG_SET_SLEEP_MODE;
+				tag->readings = 0;
+				tag->distance_a.counter = 0;
+				tag->distance_b.counter = 0;
+			}
+
+			tag_status = tag_send_timestamp_query(tag);
+
+			if (tag_status == TAG_SEND_TIMESTAMP_QUERY) {
+				tag->readings++;
+				tag_status = TAG_SEND_TIMESTAMP_QUERY;
+			} else {
+
+				tag_status = TAG_SEND_TIMESTAMP_QUERY;
+			}
+			debug(tag, tag_status);
 		}
+
+
+		if ((HAL_GetTick() - lora_send_ticks) > lora_send_timeout) {
+
+			//print_all_tags(tag_list, tag_status);
+			//free_tag_list(&tag_list);
+			lora_send_ticks = HAL_GetTick();
+		}
+
 
 		/* USER CODE END WHILE */
 

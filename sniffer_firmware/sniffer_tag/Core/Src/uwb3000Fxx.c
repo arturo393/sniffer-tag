@@ -84,10 +84,11 @@ uint8_t tag_init(dwt_config_t *dwt_config, dwt_txconfig_t *dwt_txconfig,
 		if (HAL_GetTick() - check_idle_rc_ticks > check_idle_rc_timeout)
 			return (1);
 
-	if (dwt_local_data_init(dwt_local_data) == DWT_ERROR) {
-		HAL_Delay(1000);
-		return (1);
-	}
+
+	 if (dwt_local_data_init(dwt_local_data) == DWT_ERROR) {
+	 HAL_Delay(1000);
+	 return (1);
+	 }
 
 	dwt_txconfig->power = GAIN_30DB;
 
@@ -362,7 +363,6 @@ int dwt_config2(dwt_config_t *config, dwt_local_data_t *dwt_local_data) {
 	return error;
 } // end dwt_configure()
 
-
 /*! ------------------------------------------------------------------------------------------------------------------
  * @brief function to read the OTP memory.
  *
@@ -449,9 +449,9 @@ void dwt_xfer3000(const uint32_t regFileID, //0x0, 0x04-0x7F ; 0x10000, 0x10004,
 				| DW3000_SPI_FAC);
 		cnt = 1;
 	} else if (reg_offset == 0 /*&& length > 0*/
-			&& (mode == DW3000_SPI_WR_BIT || mode == DW3000_SPI_RD_BIT)) { /* Fast Access Commands with Read/Write support (FACRW)
-			 * bit_7 is R/W operation, bit_6=zero: FastAccess command, bit_[5..1] addr, bits_0=zero: MODE of FastAccess
-			 */
+	&& (mode == DW3000_SPI_WR_BIT || mode == DW3000_SPI_RD_BIT)) { /* Fast Access Commands with Read/Write support (FACRW)
+	 * bit_7 is R/W operation, bit_6=zero: FastAccess command, bit_[5..1] addr, bits_0=zero: MODE of FastAccess
+	 */
 		header[0] |= DW3000_SPI_FARW;
 		cnt = 1;
 	} else { /* Extended Address Mode with Read/Write support (EAMRW)
@@ -894,12 +894,12 @@ void _dwt_kick_ops_table_on_wakeup(void) {
 	/* If preamble length >= 256 and set by dwt_configure(), the OPS table should be kicked off like so upon wakeup. */
 	case (DWT_ALT_OPS | DWT_SEL_OPS0):
 		dwt_modify32bitoffsetreg(OTP_CFG_ID, 0, ~(OTP_CFG_OPS_ID_BIT_MASK),
-				DWT_OPSET_LONG | OTP_CFG_OPS_KICK_BIT_MASK);
+		DWT_OPSET_LONG | OTP_CFG_OPS_KICK_BIT_MASK);
 		break;
 		/* If SCP mode is enabled by dwt_configure(), the OPS table should be kicked off like so upon wakeup. */
 	case (DWT_ALT_OPS | DWT_SEL_OPS1):
 		dwt_modify32bitoffsetreg(OTP_CFG_ID, 0, ~(OTP_CFG_OPS_ID_BIT_MASK),
-				DWT_OPSET_SCP | OTP_CFG_OPS_KICK_BIT_MASK);
+		DWT_OPSET_SCP | OTP_CFG_OPS_KICK_BIT_MASK);
 		break;
 	default:
 		break;
@@ -1468,9 +1468,9 @@ int dwt_configure(dwt_config_t *config) {
 	uint8_t chan = config->chan, cnt, flag;
 	uint32_t temp;
 	uint8_t scp = ((config->rxCode > 24) || (config->txCode > 24)) ? 1 : 0;
-	uint8_t mode =
-			(config->phrMode == DWT_PHRMODE_EXT) ?
-					SYS_CFG_PHR_MODE_BIT_MASK : 0;
+	uint8_t mode = (config->phrMode == DWT_PHRMODE_EXT) ?
+	SYS_CFG_PHR_MODE_BIT_MASK :
+															0;
 	uint16_t sts_len;
 	int error = DWT_SUCCESS;
 
@@ -1540,7 +1540,7 @@ int dwt_configure(dwt_config_t *config) {
 		//configure OPS tables for SCP mode
 		pdw3000local->sleep_mode |= DWT_ALT_OPS | DWT_SEL_OPS1; //configure correct OPS table is kicked on wakeup
 		dwt_modify32bitoffsetreg(OTP_CFG_ID, 0, ~(OTP_CFG_OPS_ID_BIT_MASK),
-				DWT_OPSET_SCP | OTP_CFG_OPS_KICK_BIT_MASK);
+		DWT_OPSET_SCP | OTP_CFG_OPS_KICK_BIT_MASK);
 
 		dwt_write32bitoffsetreg(IP_CONFIG_LO_ID, 0, IP_CONFIG_LO_SCP); //Set this if Ipatov analysis is used in SCP mode
 		dwt_write32bitoffsetreg(IP_CONFIG_HI_ID, 0, IP_CONFIG_HI_SCP);
@@ -1578,10 +1578,10 @@ int dwt_configure(dwt_config_t *config) {
 		if (preamble_len >= 256) {
 			pdw3000local->sleep_mode |= DWT_ALT_OPS | DWT_SEL_OPS0;
 			dwt_modify32bitoffsetreg(OTP_CFG_ID, 0, ~(OTP_CFG_OPS_ID_BIT_MASK),
-					DWT_OPSET_LONG | OTP_CFG_OPS_KICK_BIT_MASK);
+			DWT_OPSET_LONG | OTP_CFG_OPS_KICK_BIT_MASK);
 		} else {
 			dwt_modify32bitoffsetreg(OTP_CFG_ID, 0, ~(OTP_CFG_OPS_ID_BIT_MASK),
-					DWT_OPSET_SHORT | OTP_CFG_OPS_KICK_BIT_MASK);
+			DWT_OPSET_SHORT | OTP_CFG_OPS_KICK_BIT_MASK);
 		}
 
 	}
@@ -2600,8 +2600,7 @@ int16_t dwt_readpdoa(void) {
 	case DBL_BUFF_ACCESS_BUFFER_1:
 		//!!! Assumes that Indirect pointer register B was already set. This is done in the dwt_setdblrxbuffmode when mode is enabled.
 		pdoa = dwt_read16bitoffsetreg(INDIRECT_POINTER_B_ID,
-				BUF1_PDOA - BUF1_RX_FINFO + 2)
-				& (CIA_TDOA_1_PDOA_PDOA_BIT_MASK >> 16);
+		BUF1_PDOA - BUF1_RX_FINFO + 2) & (CIA_TDOA_1_PDOA_PDOA_BIT_MASK >> 16);
 		break;
 	case DBL_BUFF_ACCESS_BUFFER_0:
 		pdoa = dwt_read16bitoffsetreg(BUF0_PDOA, 2)
@@ -2653,7 +2652,7 @@ void dwt_readrxtimestamp(uint8_t *timestamp) {
 	case DBL_BUFF_ACCESS_BUFFER_1:
 		//!!! Assumes that Indirect pointer register B was already set. This is done in the dwt_setdblrxbuffmode when mode is enabled.
 		dwt_readfromdevice(INDIRECT_POINTER_B_ID, BUF1_RX_TIME - BUF1_RX_FINFO,
-				RX_TIME_RX_STAMP_LEN, timestamp);
+		RX_TIME_RX_STAMP_LEN, timestamp);
 		break;
 	case DBL_BUFF_ACCESS_BUFFER_0:
 		dwt_readfromdevice(BUF0_RX_TIME, 0, RX_TIME_RX_STAMP_LEN, timestamp);
@@ -2696,7 +2695,7 @@ void dwt_readrxtimestamp_ipatov(uint8_t *timestamp) {
 	case DBL_BUFF_ACCESS_BUFFER_1:
 		//!!! Assumes that Indirect pointer register B was already set. This is done in the dwt_setdblrxbuffmode when mode is enabled.
 		dwt_readfromdevice(INDIRECT_POINTER_B_ID, BUF1_IP_TS - BUF1_RX_FINFO,
-				CIA_I_RX_TIME_LEN, timestamp);
+		CIA_I_RX_TIME_LEN, timestamp);
 		break;
 	case DBL_BUFF_ACCESS_BUFFER_0:
 		dwt_readfromdevice(BUF0_IP_TS, 0, CIA_I_RX_TIME_LEN, timestamp);
@@ -2723,7 +2722,7 @@ void dwt_readrxtimestamp_sts(uint8_t *timestamp) {
 	case DBL_BUFF_ACCESS_BUFFER_1:
 		//!!! Assumes that Indirect pointer register B was already set. This is done in the dwt_setdblrxbuffmode when mode is enabled.
 		dwt_readfromdevice(INDIRECT_POINTER_B_ID, BUF1_STS_TS - BUF1_RX_FINFO,
-				CIA_C_RX_TIME_LEN, timestamp);
+		CIA_C_RX_TIME_LEN, timestamp);
 		break;
 	case DBL_BUFF_ACCESS_BUFFER_0:
 		dwt_readfromdevice(BUF0_STS_TS, 0, CIA_C_RX_TIME_LEN, timestamp);
@@ -3547,7 +3546,7 @@ void dwt_isr(void) {
 	// AES_ERR|SPICRCERR|BRNOUT|SPI_UNF|SPI_OVR|CMD_ERR|SPI_COLLISION|PLLHILO
 	if (fstat & FINT_STAT_SYS_PANIC_BIT_MASK) {
 		pdw3000local->cbData.status_hi = dwt_read16bitoffsetreg(
-				SYS_STATUS_HI_ID, 0);
+		SYS_STATUS_HI_ID, 0);
 
 		// Handle SPI CRC error event, which was due to an SPI write CRC error
 		// Handle SPI error events (if this has happened, the last SPI transaction has not completed correctly, the device should be reset)
@@ -3571,7 +3570,7 @@ void dwt_isr(void) {
 		// Handle Fast CMD errors event, the means the last CMD did not execute (e.g. it was given while device was already executing previous)
 		if (pdw3000local->cbData.status_hi & SYS_STATUS_HI_CMD_ERR_BIT_MASK) {
 			dwt_write16bitoffsetreg(SYS_STATUS_HI_ID, 0,
-					SYS_STATUS_HI_CMD_ERR_BIT_MASK); // Clear CMD error event bit
+			SYS_STATUS_HI_CMD_ERR_BIT_MASK); // Clear CMD error event bit
 			// Call the corresponding callback if present
 			/*if(pdw3000local->cbCMDErr != NULL)
 			 {
@@ -3668,12 +3667,12 @@ void dwt_isr(void) {
 			{
 			case DBL_BUFF_ACCESS_BUFFER_1: //accessing frame info relating to the second buffer (RX_BUFFER_1)
 				dwt_write8bitoffsetreg(RDB_STATUS_ID, 0,
-						RDB_STATUS_CLEAR_BUFF1_EVENTS); //clear DB status register bits corresponding to RX_BUFFER_1
+				RDB_STATUS_CLEAR_BUFF1_EVENTS); //clear DB status register bits corresponding to RX_BUFFER_1
 				finfo16 = dwt_read16bitoffsetreg(INDIRECT_POINTER_B_ID, 0);
 				break;
 			case DBL_BUFF_ACCESS_BUFFER_0: //accessing frame info relating to the first buffer (RX_BUFFER_0)
 				dwt_write8bitoffsetreg(RDB_STATUS_ID, 0,
-						RDB_STATUS_CLEAR_BUFF0_EVENTS); //clear DB status register bits corresponding to RX_BUFFER_0
+				RDB_STATUS_CLEAR_BUFF0_EVENTS); //clear DB status register bits corresponding to RX_BUFFER_0
 				finfo16 = dwt_read16bitoffsetreg(BUF0_RX_FINFO, 0);
 				break;
 			default: //accessing frame info relating to the second buffer (RX_BUFFER_0) (single buffer mode)
@@ -4481,16 +4480,16 @@ uint16_t dwt_readtempvbat(void) {
 
 	// Reading All SAR inputs
 	dwt_write8bitoffsetreg(SAR_CTRL_ID, SAR_CTRL_SAR_START_BIT_OFFSET,
-			SAR_CTRL_SAR_START_BIT_MASK);
+	SAR_CTRL_SAR_START_BIT_MASK);
 
 	// Wait until SAR conversion is complete.
 	while (!(dwt_read8bitoffsetreg(SAR_STATUS_ID,
-			SAR_STATUS_SAR_DONE_BIT_OFFSET) & SAR_STATUS_SAR_DONE_BIT_MASK))
+	SAR_STATUS_SAR_DONE_BIT_OFFSET) & SAR_STATUS_SAR_DONE_BIT_MASK))
 		;
 
 	// Read voltage and temperature.
 	wr_buf = dwt_read16bitoffsetreg(SAR_READING_ID,
-			SAR_READING_SAR_READING_VBAT_BIT_OFFSET);
+	SAR_READING_SAR_READING_VBAT_BIT_OFFSET);
 
 	vbat_raw = (uint8_t) (wr_buf & 0x00ff);
 	temp_raw = (uint8_t) (wr_buf >> 8);
@@ -4649,9 +4648,8 @@ uint16_t dwt_calcpgcount(uint8_t pgdly, int channel) {
 	// Wait for calibration to complete
 	while (dwt_read8bitoffsetreg(PGC_CTRL_ID, 0) & PGC_CTRL_PGC_START_BIT_MASK)
 		;
-	count =
-			dwt_read16bitoffsetreg(PGC_STATUS_ID,
-					PGC_STATUS_PG_DELAY_COUNT_BIT_OFFSET) & PGC_STATUS_PG_DELAY_COUNT_BIT_MASK;
+	count = dwt_read16bitoffsetreg(PGC_STATUS_ID,
+	PGC_STATUS_PG_DELAY_COUNT_BIT_OFFSET) & PGC_STATUS_PG_DELAY_COUNT_BIT_MASK;
 
 	dwt_disable_rftx_blocks();
 	dwt_disable_rf_tx(0);
