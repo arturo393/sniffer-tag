@@ -179,6 +179,9 @@ int main(void) {
 	dwt_configuresleep(DWT_RUNSAR, DWT_WAKE_WUP);
 	dwt_configuresleepcnt(4095);
 	dwt_setsniffmode(1, 15, 100);
+
+	uint32_t query_timeout = 10000;
+	uint32_t query_ticks;
 	/* Time-stamps of frames transmission/reception, expressed in device time units. */
 	/* USER CODE END 2 */
 
@@ -186,20 +189,31 @@ int main(void) {
 	/* USER CODE BEGIN WHILE */
 	while (1) {
 		if (tag_status == TAG_WAIT_FOR_FIRST_DETECTION) {
-			debug(tag,tag_status);
+			debug(tag, tag_status);
 
 			tag_status = process_first_tag_information(tag);
 			debug(tag, tag_status);
 			if (tag_status != TAG_WAIT_FOR_TIMESTAMPT_QUERY)
 				tag_status = TAG_WAIT_FOR_FIRST_DETECTION;
+			else if (tag_status == TAG_WAIT_FOR_TIMESTAMPT_QUERY)
+				query_ticks = HAL_GetTick();
 
 		} else if (tag_status == TAG_WAIT_FOR_TIMESTAMPT_QUERY) {
 			tag_status = process_queried_tag_information(tag);
 
-			if (tag_status != TAG_WAIT_FOR_TIMESTAMPT_QUERY)
+			if (tag_status == TAG_TX_SUCCESS) {
+				if (tag->command == TAG_TIMESTAMP_QUERY)
+					tag_status = TAG_WAIT_FOR_TIMESTAMPT_QUERY;
+				else if (tag->command == TAG_SET_SLEEP_MODE)
+					tag_status = TAG_SLEEP;
+			} else
 				tag_status = TAG_WAIT_FOR_TIMESTAMPT_QUERY;
 
-			debug(tag,tag_status);
+			debug(tag, tag_status);
+
+			if (HAL_GetTick() - query_ticks > query_timeout) {
+				tag_status = TAG_SLEEP;
+			}
 
 		} else if (tag_status == TAG_SLEEP) {
 
@@ -212,7 +226,8 @@ int main(void) {
 			if (tag_init(&defatult_dwt_config, &defatult_dwt_txconfig,
 					&dwt_local_data, running_device, RATE_6M8) == 1)
 				Error_Handler();
-			dwt_setsniffmode(1, 10, 200);
+			//dwt_setsniffmode(1, 10, 200);
+			tag_status = TAG_WAIT_FOR_FIRST_DETECTION;
 		}
 		//HAL_Delay(1000);
 		/* USER CODE END WHILE */

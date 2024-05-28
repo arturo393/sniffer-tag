@@ -10,7 +10,8 @@
 char *TAG_MESSAGES[] = { "NO_RESPONSE", "NO_RXCG_DETECTED", "RX_TIMEOUT",
 		"RX_CRC_VALID", "RX_ERROR", "RX_DATA_ZERO", "RX_COMMAND_ERROR",
 		"TX_ERROR", "SLEEP", "WAKE_UP", "WAIT_FOR_FIRST_DETECTION",
-		"WAIT_FOR_TIMESTAMP_QUERY" };
+		"WAIT_FOR_TIMESTAMP_QUERY",	"TAG_TX_SUCCESS",
+		"TAG_WRONG_ID_MATCH" };
 
 TAG_STATUS_t process_first_tag_information(TAG_t *tag) {
 	TAG_STATUS_t status_reg = 0;
@@ -73,9 +74,7 @@ TAG_STATUS_t process_first_tag_information(TAG_t *tag) {
 
 TAG_STATUS_t process_queried_tag_information(TAG_t *tag) {
 	TAG_STATUS_t status_reg = 0;
-	uint8_t tx_buffer_size = TX_BUFFER_SIZE;
-	uint8_t tx_buffer[TX_BUFFER_SIZE] = { 0 };
-	int index = 0;
+
 
 	start_tag_reception_inmediate(0, 0);
 	status_reg = wait_rx_data();
@@ -89,13 +88,23 @@ TAG_STATUS_t process_queried_tag_information(TAG_t *tag) {
 		return (TAG_RX_DATA_ZERO);
 	dwt_readrxdata(rx_buffer, (uint16_t) rx_buffer_size, 0);
 
-	tag->command = TAG_TIMESTAMP_QUERY;
-
-	uint8_t received_command = rx_buffer[0];
+	tag->command = rx_buffer[0];
 	uint32_t received_id = *(uint32_t*) (rx_buffer + 1);
-	if (tag->command != received_command && tag->id != received_id)
+	if (tag->id != received_id)
 		return (TAG_RX_COMMAND_ERROR);
+	if (tag->command == TAG_TIMESTAMP_QUERY)
+		return (process_response(tag));
+	else if(tag->command == TAG_SET_SLEEP_MODE)
+		return (process_response(tag));
 
+	return(TAG_RX_COMMAND_ERROR);
+
+}
+
+TAG_STATUS_t process_response(TAG_t *tag) {
+	uint8_t tx_buffer_size = TX_BUFFER_SIZE;
+	uint8_t tx_buffer[TX_BUFFER_SIZE] = { 0 };
+	int index = 0;
 	uint64_t poll_rx_timestamp = get_rx_timestamp_u64();
 
 	/** Set send time for response */
@@ -125,7 +134,7 @@ TAG_STATUS_t process_queried_tag_information(TAG_t *tag) {
 	if (dwt_starttx(DWT_START_TX_DELAYED) == DWT_ERROR)
 		return (TAG_TX_ERROR);
 
-	return (TAG_WAIT_FOR_TIMESTAMPT_QUERY);
+	return (TAG_TX_SUCCESS);
 }
 
 TAG_STATUS_t send_message_with_timestamps() {
@@ -399,48 +408,51 @@ void start_tag_reception_inmediate(uint8_t preamble_timeout, uint8_t rx_timeout)
 #define RX_DATA_TIMEOUT_MS 1000 // Timeout in milliseconds
 
 TAG_STATUS_t wait_rx_data() {
-    uint32_t status_reg;
-    uint32_t start_time = HAL_GetTick(); // Get the current time in milliseconds
-    uint8_t timeout_reached = 0;
+	uint32_t status_reg;
+	uint32_t start_time = HAL_GetTick(); // Get the current time in milliseconds
+	uint8_t timeout_reached = 0;
 
-    while (!timeout_reached) {
-        if (((status_reg = dwt_read32bitreg(SYS_STATUS_ID)) & (SYS_STATUS_RXFCG_BIT_MASK | SYS_STATUS_ALL_RX_TO | SYS_STATUS_ALL_RX_ERR))) {
-            break; // Exit the loop if one of the conditions is met
-        }
+	while (!timeout_reached) {
+		if (((status_reg = dwt_read32bitreg(SYS_STATUS_ID))
+				& (SYS_STATUS_RXFCG_BIT_MASK | SYS_STATUS_ALL_RX_TO
+						| SYS_STATUS_ALL_RX_ERR))) {
+			break; // Exit the loop if one of the conditions is met
+		}
 
-        // Check for timeout
-        if ((HAL_GetTick() - start_time) >= RX_DATA_TIMEOUT_MS) {
-            timeout_reached = 1;
-        }
-    }
+		// Check for timeout
+		if ((HAL_GetTick() - start_time) >= RX_DATA_TIMEOUT_MS) {
+			timeout_reached = 1;
+		}
+	}
 
-    if (timeout_reached) {
-        // Handle timeout
-        return TAG_RX_TIMEOUT;
-    }
+	if (timeout_reached) {
+		// Handle timeout
+		return TAG_RX_TIMEOUT;
+	}
 
-    // Check for receive errors
-    if ((status_reg & SYS_STATUS_ALL_RX_ERR)) {
-        dwt_write32bitreg(SYS_STATUS_ID, SYS_STATUS_ALL_RX_ERR);
-        return TAG_RX_ERROR;
-    }
+	// Check for receive errors
+	if ((status_reg & SYS_STATUS_ALL_RX_ERR)) {
+		dwt_write32bitreg(SYS_STATUS_ID, SYS_STATUS_ALL_RX_ERR);
+		return TAG_RX_ERROR;
+	}
 
-    // Check for receive timeouts
-    if ((status_reg & SYS_STATUS_ALL_RX_TO)) {
-        dwt_write32bitreg(SYS_STATUS_ID, SYS_STATUS_ALL_RX_TO);
-        return TAG_RX_TIMEOUT;
-    }
+	// Check for receive timeouts
+	if ((status_reg & SYS_STATUS_ALL_RX_TO)) {
+		dwt_write32bitreg(SYS_STATUS_ID, SYS_STATUS_ALL_RX_TO);
+		return TAG_RX_TIMEOUT;
+	}
 
-    if ((status_reg & SYS_STATUS_RXFCG_BIT_MASK)) {
-        // Clear RX error/timeout events in the DW IC status register
-        dwt_write32bitreg(SYS_STATUS_ID, SYS_STATUS_ALL_RX_TO | SYS_STATUS_ALL_RX_ERR);
-        return TAG_RX_CRC_VALID;
-    }
+	if ((status_reg & SYS_STATUS_RXFCG_BIT_MASK)) {
+		// Clear RX error/timeout events in the DW IC status register
+		dwt_write32bitreg(SYS_STATUS_ID,
+				SYS_STATUS_ALL_RX_TO | SYS_STATUS_ALL_RX_ERR);
+		return TAG_RX_CRC_VALID;
+	}
 
-    // Clear good RX frame event in the DW IC status register
-    dwt_write32bitreg(SYS_STATUS_ID, SYS_STATUS_RXFCG_BIT_MASK);
+	// Clear good RX frame event in the DW IC status register
+	dwt_write32bitreg(SYS_STATUS_ID, SYS_STATUS_RXFCG_BIT_MASK);
 
-    return TAG_NO_RXCG_DETECTED;
+	return TAG_NO_RXCG_DETECTED;
 }
 
 uint32_t allocate_and_read_received_frame(uint8_t **rx_buffer) {

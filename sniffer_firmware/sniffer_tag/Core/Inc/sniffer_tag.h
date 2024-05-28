@@ -84,6 +84,7 @@ typedef enum {
 	TAG_END_READINGS,
 	TAG_DISCOVERY,
 	TAG_SEND_TIMESTAMP_QUERY,
+	TAG_SEND_SET_SLEEP,
 	TAG_UNKNOWN,
 } TAG_STATUS_t;
 
@@ -113,6 +114,7 @@ double distance_moving_average(Distance_t *distance);
 int start_transmission_inmediate_with_response_expected(TX_BUFFER_t tx);
 TAG_STATUS_t wait_rx_data();
 void debug(TAG_t *tag,TAG_STATUS_t status);
+void debug_tag(TAG_t *tag);
 double distance_smooth(Distance_t *distance);
 void set_battery_voltage(Mesurement_data_t *battery_voltage);
 void set_temperature(Mesurement_data_t *temperature);

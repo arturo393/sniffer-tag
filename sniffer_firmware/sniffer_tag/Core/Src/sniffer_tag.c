@@ -10,7 +10,7 @@
 char *TAG_MESSAGES[] = { "NO_RESPONSE", "NO_RXCG_DETECTED", "RX_FRAME_TIMEOUT",
 		"RX_PREAMBLE_DETECTION_TIMEOUT", "RX_CRC_VALID", "RX_ERROR",
 		"RX_DATA_ZERO", "RX_NO_COMMAND", "TX_ERROR", "HUMAN_DISTANCE_OK",
-		"END_READINGS", "DISCOVERY", "SEND_TIMESTAMP_QUERY","UNKNOWN" };
+		"END_READINGS", "DISCOVERY", "SEND_TIMESTAMP_QUERY","TAG_SET_SLEEP_MODE","UNKNOWN" };
 
 TAG_t* create_TAG() {
 	TAG_t *tag = (TAG_t*) malloc(sizeof(TAG_t));
@@ -118,7 +118,7 @@ TAG_STATUS_t tag_send_timestamp_query(TAG_t *tag) {
 	TAG_STATUS_t status_reg = 0;
 	uint8_t tx_buffer_size = TX_BUFFER_SIZE;
 	uint8_t tx_buffer[TX_BUFFER_SIZE] = { 0 };
-	tag->command = TAG_TIMESTAMP_QUERY;
+
 
 	tx_buffer[0] = tag->command;
 	*(uint32_t*) (tx_buffer + sizeof(tag->command)) = tag->id;
@@ -152,13 +152,33 @@ TAG_STATUS_t tag_send_timestamp_query(TAG_t *tag) {
 		return (TAG_RX_DATA_ZERO);
 
 	tag->command = rx_buffer[0];
+	uint64_t rtd_init = 0;
+	uint64_t rtd_resp = 0;
+	float clockOffsetRatio = 0.0;
+	double tof;
 	switch (tag->command) {
 	case TAG_TIMESTAMP_QUERY:
 
-		uint64_t rtd_init = 0;
-		uint64_t rtd_resp = 0;
-		float clockOffsetRatio = 0.0;
-		uint64_t final_tx_time = 0;
+		/* Get timestamps embedded in response message. */
+		tag->poll_rx_timestamp = *(uint32_t*) (rx_buffer + 1 );
+		tag->resp_tx_timestamp = *(uint32_t*) (rx_buffer + 1 + 4);
+
+		/* Compute time of flight and distance, using clock offset ratio to correct for differing local and remote clock rates */
+		rtd_init = get_rx_timestamp_u64() - get_tx_timestamp_u64();
+		rtd_resp = *(uint32_t*) (rx_buffer + 1 + 4) - *(uint32_t*) (rx_buffer + 1 );
+
+		/*  Read carrier integrator value and calculate clock offset ratio. See NOTE 11 below. */
+		clockOffsetRatio = ((float) dwt_readclockoffset()) / (uint32_t) (1 << 26);
+		/* Hold copies of computed time of flight and distance here for reference so that it can be examined at a debug breakpoint. */
+
+		tof = ((rtd_init - rtd_resp * (1 - clockOffsetRatio)) / 2.0)
+				* DWT_TIME_UNITS;
+		tag->distance->value = tof * SPEED_OF_LIGHT;
+		tag->distance->readings[tag->distance->counter++] = tag->distance->value;
+
+		return (TAG_SEND_TIMESTAMP_QUERY);
+		break;
+	case TAG_SET_SLEEP_MODE:
 
 
 		/* Get timestamps embedded in response message. */
@@ -172,17 +192,10 @@ TAG_STATUS_t tag_send_timestamp_query(TAG_t *tag) {
 		/*  Read carrier integrator value and calculate clock offset ratio. See NOTE 11 below. */
 		clockOffsetRatio = ((float) dwt_readclockoffset()) / (uint32_t) (1 << 26);
 		/* Hold copies of computed time of flight and distance here for reference so that it can be examined at a debug breakpoint. */
-		double tof;
 		tof = ((rtd_init - rtd_resp * (1 - clockOffsetRatio)) / 2.0)
 				* DWT_TIME_UNITS;
 		tag->distance->value = tof * SPEED_OF_LIGHT;
 		tag->distance->readings[tag->distance->counter++] = tag->distance->value;
-
-		return (TAG_SEND_TIMESTAMP_QUERY);
-		break;
-	case TAG_SET_SLEEP_MODE:
-		tag->id = *(uint32_t*) (rx_buffer + 1);
-		tag->distance->value = calculate_tag_distance(rx_buffer, tag->distance);
 		return (TAG_END_READINGS);
 	default:
 		return (TAG_RX_NO_COMMAND);
@@ -589,13 +602,13 @@ void debug(TAG_t *tag, TAG_STATUS_t status) {
 	int size = 0;
 
 	/* Check if status value is within the valid range */
-	if (status < TAG_NO_RESPONSE || status > TAG_SEND_TIMESTAMP_QUERY) {
+	if (status >=TAG_UNKNOWN) {
 		status = TAG_UNKNOWN;
 	}
 
 	size =
 			sprintf(dist_str,
-					"{message: %s},{ID: 0x%08X},{command: 0x%02X },{times: %lu},{poll_rx_ts: 0x%08X },{resp_tx_ts: 0x%08X},{distance_a: %.2f},{distance_b: %.2f},{battery_voltage: %.2f},{temperature: %.2f}\n\r",
+					"{message: %s},{ID: 0x%08X},{command: 0x%02X },{times: %lu},{poll_rx_ts: 0x%08X },{resp_tx_ts: 0x%08X},{distance_a: %.2f},{distance_b: %.2f},{battery_voltage: %.2f},{temperature: %.2f}",
 					TAG_MESSAGES[status], (int) tag->id,
 					(int) tag->command, (unsigned long) tag->readings,
 					(int) tag->poll_rx_timestamp,
@@ -605,19 +618,46 @@ void debug(TAG_t *tag, TAG_STATUS_t status) {
 					(float) tag->temperature.real);
 
 	HAL_UART_Transmit(&huart1, (uint8_t*) dist_str, size, HAL_MAX_DELAY);
+	if(status == TAG_DISCOVERY || status == TAG_SEND_TIMESTAMP_QUERY)
+		HAL_UART_Transmit(&huart1, (uint8_t*) "\r", 1, HAL_MAX_DELAY);
+	else
+		HAL_UART_Transmit(&huart1, (uint8_t*) "\n\r", 2, HAL_MAX_DELAY);
+
+
+}
+
+void debug_tag(TAG_t *tag) {
+	/* Format the string directly into the dynamically allocated buffer */
+	char dist_str[300] = { 0 };
+	int size = 0;
+	size =
+			sprintf(dist_str,
+					"{ID: 0x%08X},{times: %lu},{distance_a: %.2f},{distance_b: %.2f},{battery_voltage: %.2f},{temperature: %.2f}",
+					(int) tag->id,
+					(unsigned long) tag->readings,
+					tag->distance_a.value, tag->distance_b.value,
+					(float) tag->battery_voltage.real,
+					(float) tag->temperature.real);
+
+	HAL_UART_Transmit(&huart1, (uint8_t*) dist_str, size, HAL_MAX_DELAY);
+
 }
 
 void print_all_tags(TAG_Node *head, TAG_STATUS_t status) {
+	HAL_UART_Transmit(&huart1, (uint8_t*) "\n####\n\r", (uint16_t) 7,
+	HAL_MAX_DELAY);
 	if (head == NULL) {
-		HAL_UART_Transmit(&huart1, (uint8_t*) "No tag detected\n",
+		HAL_UART_Transmit(&huart1, (uint8_t*) "No tag detected",
 				(uint16_t) 21, HAL_MAX_DELAY);
+		HAL_UART_Transmit(&huart1, (uint8_t*) "####\n\r", (uint16_t) 5,
+		HAL_MAX_DELAY);
 		return;
 	}
 	TAG_Node *current = head;
-	HAL_UART_Transmit(&huart1, (uint8_t*) "\n####\n\r", (uint16_t) 6,
-	HAL_MAX_DELAY);
+
 	while (current != NULL) {
-		debug(current, status);
+		debug_tag(current);
+		HAL_UART_Transmit(&huart1, (uint8_t*) "\n\r", (uint16_t) 2,HAL_MAX_DELAY);
 		current = current->next;
 	}
 	HAL_UART_Transmit(&huart1, (uint8_t*) "####\n\r", (uint16_t) 5,

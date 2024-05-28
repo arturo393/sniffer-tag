@@ -142,7 +142,7 @@ int main(void) {
 
 	char dist_str[100];
 	int size;
-	//TAG_Node *tag_list = NULL;
+	TAG_Node *tag_list = NULL;
 	hw_a = malloc(sizeof(SPI_HW_t));
 	if (hw_a == NULL)
 		Error_Handler();
@@ -209,6 +209,8 @@ int main(void) {
 	uint32_t lora_send_timeout = 5000;
 	uint32_t lora_send_ticks = HAL_GetTick();
 	tag_status = TAG_DISCOVERY;
+	uint32_t query_timeout = 10000;
+	uint32_t query_ticks;
 
 
 	/* Time-stamps of frames transmission/reception, expressed in device time units. */
@@ -232,6 +234,8 @@ int main(void) {
 
 			if (tag_status != TAG_SEND_TIMESTAMP_QUERY)
 				tag_status = TAG_DISCOVERY;
+			else
+				query_ticks = HAL_GetTick();
 			set_battery_voltage(&(tag->battery_voltage));
 			set_temperature(&(tag->temperature));
 			debug(tag, tag_status);
@@ -249,28 +253,38 @@ int main(void) {
 			}
 			if (tag->readings == DISTANCE_READINGS) {
 				tag->command = TAG_SET_SLEEP_MODE;
-				tag->readings = 0;
-				tag->distance_a.counter = 0;
-				tag->distance_b.counter = 0;
+				tag_status = TAG_SEND_SET_SLEEP;
 			}
-
+			debug(tag, tag_status);
 			tag_status = tag_send_timestamp_query(tag);
 
 			if (tag_status == TAG_SEND_TIMESTAMP_QUERY) {
 				tag->readings++;
 				tag_status = TAG_SEND_TIMESTAMP_QUERY;
-			} else {
 
+			} else if (tag_status == TAG_END_READINGS){
+				insert_tag(&tag_list,*tag);
+				tag_status= TAG_DISCOVERY;
+				tag->id = 0;
+				tag->readings = 0;
+				tag->command = 0;
+				tag->distance_a.counter = 0;
+				tag->distance_b.counter = 0;
+			}else {
 				tag_status = TAG_SEND_TIMESTAMP_QUERY;
 			}
 			debug(tag, tag_status);
+			if(HAL_GetTick() - query_ticks > query_timeout){
+				tag_status = TAG_DISCOVERY;
+			}
+
 		}
 
 
 		if ((HAL_GetTick() - lora_send_ticks) > lora_send_timeout) {
 
-			//print_all_tags(tag_list, tag_status);
-			//free_tag_list(&tag_list);
+			print_all_tags(tag_list, tag_status);
+			free_tag_list(&tag_list);
 			lora_send_ticks = HAL_GetTick();
 		}
 

@@ -58,6 +58,8 @@ typedef enum{
 	TAG_WAKE_UP,
 	TAG_WAIT_FOR_FIRST_DETECTION,
 	TAG_WAIT_FOR_TIMESTAMPT_QUERY,
+	TAG_TX_SUCCESS,
+	TAG_WRONG_ID_MATCH,
 	TAG_UNKNOWN
 
 }TAG_STATUS_t;
@@ -85,5 +87,5 @@ uint32_t allocate_and_read_received_frame(uint8_t **rx_buffer);
 uint32_t create_message_and_alloc_buffer(TX_BUFFER_t *tx,TAG_t *tag);
 int start_transmission_delayed_with_response_expected(TX_BUFFER_t tx);
 void debug(TAG_t *tag,TAG_STATUS_t status);
+TAG_STATUS_t process_response(TAG_t *tag);
 #endif /* INC_HUMAN_TAG_H_ */
-
