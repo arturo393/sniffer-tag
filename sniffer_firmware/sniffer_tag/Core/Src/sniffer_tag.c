@@ -647,10 +647,8 @@ void print_all_tags(TAG_Node *head, TAG_STATUS_t status) {
 	HAL_UART_Transmit(&huart1, (uint8_t*) "\n####\n\r", (uint16_t) 7,
 	HAL_MAX_DELAY);
 	if (head == NULL) {
-		HAL_UART_Transmit(&huart1, (uint8_t*) "No tag detected",
-				(uint16_t) 21, HAL_MAX_DELAY);
-		HAL_UART_Transmit(&huart1, (uint8_t*) "####\n\r", (uint16_t) 5,
-		HAL_MAX_DELAY);
+		HAL_UART_Transmit(&huart1, (uint8_t*) "No tag detected\n\r####\n\r",
+				(uint16_t) 23, HAL_MAX_DELAY);
 		return;
 	}
 	TAG_Node *current = head;
