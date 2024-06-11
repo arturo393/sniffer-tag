@@ -37,6 +37,9 @@ SPI_HW_t *hw;
 dwt_local_data_t *pdw3000local;
 uint8_t crcTable[256];
 uint8_t recvChar;
+LORA_t lora;
+SX1276_HW_t sx1276_hw_tx;
+SX1276_HW_t sx1276_hw_rx;
 /* USER CODE END PTD */
 
 /* Private define ------------------------------------------------------------*/
@@ -50,6 +53,8 @@ uint8_t recvChar;
 /* USER CODE END PM */
 
 /* Private variables ---------------------------------------------------------*/
+I2C_HandleTypeDef hi2c1;
+
 SPI_HandleTypeDef hspi1;
 SPI_HandleTypeDef hspi2;
 
@@ -68,6 +73,7 @@ static void MX_SPI1_Init(void);
 static void MX_SPI2_Init(void);
 static void MX_TIM4_Init(void);
 static void MX_USART1_UART_Init(void);
+static void MX_I2C1_Init(void);
 /* USER CODE BEGIN PFP */
 
 /* USER CODE END PFP */
@@ -112,108 +118,45 @@ int main(void)
   MX_SPI2_Init();
   MX_TIM4_Init();
   MX_USART1_UART_Init();
+  MX_I2C1_Init();
   /* USER CODE BEGIN 2 */
 
-	HAL_GPIO_WritePin(GPIOA, DW3000_RST_Pin, GPIO_PIN_SET);
-	/*Local device data, can be an array to support multiple DW3000 testing applications/platforms */
+	pdw3000local = malloc(sizeof(dwt_local_data_t));
 
-	dwt_local_data_t dwt_local_data;
-	pdw3000local = &dwt_local_data;
-	/* Default communication configuration. We use default non-STS DW mode. */
-	dwt_config_t defatult_dwt_config = { 5, /* Channel number. */
-	DWT_PLEN_128, /* Preamble length. Used in TX only. */
-	DWT_PAC8, /* Preamble acquisition chunk size. Used in RX only. */
-	9, /* TX preamble code. Used in TX only. */
-	9, /* RX preamble code. Used in RX only. */
-	1, /* 0 to use standard 8 symbol SFD, 1 to use non-standard 8 symbol, 2 for non-standard 16 symbol SFD and 3 for 4z 8 symbol SDF type */
-	DWT_BR_6M8, /* Data rate. */
-	DWT_PHRMODE_STD, /* PHY header mode. */
-	DWT_PHRRATE_STD, /* PHY header rate. */
-	(129 + 8 - 8), /* SFD timeout (preamble length + 1 + SFD length - PAC size). Used in RX only. */
-	DWT_STS_MODE_OFF, /* STS disabled */
-	DWT_STS_LEN_64,/* STS length see allowed values in Enum dwt_sts_lengths_e */
-	DWT_PDOA_M0 /* PDOA mode off */
-	};
-	/* Values for the PG_DELAY and TX_POWER registers reflect the bandwidth and power of the spectrum at the current
-	 * temperature. These values can be calibrated prior to taking reference measurements. See NOTE 8 below. */
-	static dwt_txconfig_t defatult_dwt_txconfig = { 0x34, /* PG delay. */
-	0xfdfdfdfd, /* TX power. */
-	0x0 /*PG count*/
-	};
+	init_sx1276_hw(&sx1276_hw_tx, &hspi2, SX1276_TX_NSS_GPIO_Port,
+	SX1276_TX_NSS_Pin,
+	SX1276_TX_NRST_GPIO_Port, SX1276_TX_NRST_Pin,
+	SX1276_TX_DIO0_GPIO_Port,
+	SX1276_TX_DIO0_Pin);
 
-	char dist_str[100];
-	int size;
-	TAG_Node *tag_list = NULL;
-	hw_a = malloc(sizeof(SPI_HW_t));
-	if (hw_a == NULL)
-		Error_Handler();
+	init_sx1276_hw(&sx1276_hw_rx, &hspi2, SX1276_RX_NSS_GPIO_Port,
+	SX1276_RX_NSS_Pin,
+	SX1276_RX_NRST_GPIO_Port, SX1276_RX_NRST_Pin,
+	SX1276_RX_DIO0_GPIO_Port,
+	SX1276_RX_DIO0_Pin);
 
-	hw_a->spi = &hspi1;
-	hw_a->nrstPin = DW3000_RST_Pin;
-	hw_a->nrstPort = DW3000_RST_GPIO_Port;
-	hw_a->nssPin = SPI1_CS_Pin;
-	hw_a->nssPort = SPI1_CS_GPIO_Port;
-	size = sprintf((char*) dist_str, "\n\rDEV_UWB3000F27_A init\n\r");
-	HAL_UART_Transmit(&huart1, (uint8_t*) dist_str, (uint16_t) size,
-	HAL_MAX_DELAY);
-
-	HAL_GPIO_WritePin(hw_a->nrstPort, hw_a->nrstPin, GPIO_PIN_RESET);/* Target specific drive of RSTn line into DW IC low for a period. */
-	HAL_Delay(1);
-	HAL_GPIO_WritePin(hw_a->nrstPort, hw_a->nrstPin, GPIO_PIN_SET);
-	hw = hw_a;
-	if (tag_init(&defatult_dwt_config, &defatult_dwt_txconfig, &dwt_local_data,
-			running_device, RATE_6M8) == 1)
-		Error_Handler();
-
-	hw_b = malloc(sizeof(SPI_HW_t));
-	if (hw_b == NULL)
-		Error_Handler();
-
-	hw_b->spi = &hspi1;
-	hw_b->nrstPin = DW3000_RST_RCV_Pin;
-	hw_b->nrstPort = DW3000_RST_RCV_GPIO_Port;
-	hw_b->nssPin = SPI2_CS_Pin;
-	hw_b->nssPort = SPI2_CS_GPIO_Port;
-	size = sprintf((char*) dist_str, "\n\rDEV_UWB3000F27_B init\n\r");
-	HAL_UART_Transmit(&huart1, (uint8_t*) dist_str, (uint16_t) size,
-	HAL_MAX_DELAY);
-
-	HAL_GPIO_WritePin(hw_b->nrstPort, hw_b->nrstPin, GPIO_PIN_RESET);/* Target specific drive of RSTn line into DW IC low for a period. */
-	HAL_Delay(1);
-	HAL_GPIO_WritePin(hw_b->nrstPort, hw_b->nrstPin, GPIO_PIN_SET);
-	hw = hw_b;
-	if (tag_init(&defatult_dwt_config, &defatult_dwt_txconfig, &dwt_local_data,
-			running_device, RATE_6M8) == 1)
-		Error_Handler();
+	lora_init(&lora, &sx1276_hw_tx, &sx1276_hw_rx);
+	TAG_List list = { NULL, 0 };
+	SPI_HW_t *hw_a = init_uwb_device(&hspi1, DW3000_A_CS_GPIO_Port,
+	DW3000_A_CS_Pin,
+	DW3000_A_RST_GPIO_Port, DW3000_A_RST_Pin);
+	SPI_HW_t *hw_b = init_uwb_device(&hspi1, DW3000_B_CS_GPIO_Port,
+	DW3000_B_CS_Pin,
+	DW3000_B_RST_GPIO_Port, DW3000_B_RST_Pin);
 
 	/* Frames used in the ranging process. See NOTE 2 below. */
 
 	/* Hold copy of status register state here for reference so that it can be examined at a debug breakpoint. */
-	tag = create_TAG();
-	TAG_STATUS_t tag_status;
-	uint32_t bat = _dwt_otpread(VBAT_ADDRESS);
-	uint8_t bat1 = (uint8_t) (bat >> 16);
-	uint8_t bat2 = (uint8_t) (bat >> 8);
-	uint8_t bat3 = (uint8_t) bat;
+	TAG_t tag;
+	reset_TAG_values(&tag);
 
-	int temp = bat1 + bat2 + bat3;
-	temp++;
-	uint16_t read_temp_vbat = dwt_readtempvbat();
-	uint8_t raw_temp = (uint8_t) (read_temp_vbat >> 8);
-	uint8_t raw_vbbat = (uint8_t) (read_temp_vbat);
-	float temperature = dwt_convertrawtemperature(raw_temp);
-	float battery_voltage = dwt_convertrawvoltage(raw_vbbat);
-
-	float temp2 = temperature + battery_voltage;
-	temp2++;
-
+	TAG_STATUS_t tag_status = TAG_DISCOVERY;
 	uint32_t lora_send_timeout = 5000;
 	uint32_t lora_send_ticks = HAL_GetTick();
-	tag_status = TAG_DISCOVERY;
-	uint32_t query_timeout = 10000;
+	uint32_t query_timeout = 1000;
 	uint32_t query_ticks;
 
-
+	RDSS_status_t rdss_status;
 
 	/* Time-stamps of frames transmission/reception, expressed in device time units. */
   /* USER CODE END 2 */
@@ -226,71 +169,138 @@ int main(void)
 
 			if (hw == hw_a) {
 				hw = hw_b;
-				tag->distance = &(tag->distance_b);
+				tag.distance = &(tag.distance_b);
 			} else {
 				hw = hw_a;
-				tag->distance = &(tag->distance_a);
+				tag.distance = &(tag.distance_a);
 			}
 
-			tag_status = tag_discovery(tag);
+			tag_status = tag_discovery(&tag);
 
 			if (tag_status != TAG_SEND_TIMESTAMP_QUERY)
 				tag_status = TAG_DISCOVERY;
 			else
 				query_ticks = HAL_GetTick();
-			set_battery_voltage(&(tag->battery_voltage));
-			set_temperature(&(tag->temperature));
+			set_battery_voltage(&(tag.battery_voltage));
+			set_temperature(&(tag.temperature));
 			debug(tag, tag_status);
 
 		} else if (tag_status == TAG_SEND_TIMESTAMP_QUERY) {
-			if (tag->readings < DISTANCE_READINGS) {
+			if (tag.readings < DISTANCE_READINGS) {
 				if (hw == hw_a) {
 					hw = hw_b;
-					tag->distance = &(tag->distance_b);
+					tag.distance = &(tag.distance_b);
 				} else {
 					hw = hw_a;
-					tag->distance = &(tag->distance_a);
+					tag.distance = &(tag.distance_a);
 				}
-				tag->command = TAG_TIMESTAMP_QUERY;
+				tag.command = TAG_TIMESTAMP_QUERY;
 			}
-			if (tag->readings == DISTANCE_READINGS) {
-				tag->command = TAG_SET_SLEEP_MODE;
+			if (tag.readings == DISTANCE_READINGS - 2) {
+				tag.command = TAG_SET_SLEEP_MODE;
 				tag_status = TAG_SEND_SET_SLEEP;
 			}
 			debug(tag, tag_status);
-			tag_status = tag_send_timestamp_query(tag);
+			tag_status = tag_send_timestamp_query(&tag);
 
 			if (tag_status == TAG_SEND_TIMESTAMP_QUERY) {
-				tag->readings++;
+				tag.readings++;
 				tag_status = TAG_SEND_TIMESTAMP_QUERY;
 
-			} else if (tag_status == TAG_END_READINGS){
-				insert_tag(&tag_list,*tag);
-				tag_status= TAG_DISCOVERY;
-				tag->id = 0;
-				tag->readings = 0;
-				tag->command = 0;
-				tag->distance_a.counter = 0;
-				tag->distance_b.counter = 0;
-			}else {
+			} else if (tag_status == TAG_END_READINGS) {
+				double distance_a_sum = 0;
+				double distance_b_sum = 0;
+				for (uint8_t i = 0; i < tag.distance_a.counter; i++)
+					distance_a_sum += tag.distance_a.readings[i];
+
+				for (uint8_t i = 0; i < tag.distance_b.counter; i++)
+					distance_b_sum += tag.distance_b.readings[i];
+
+				tag.distance_a.value = (uint16_t) ((distance_a_sum * 100)
+						/ tag.distance_a.counter);
+				tag.distance_b.value = (uint16_t) ((distance_b_sum * 100)
+						/ tag.distance_b.counter);
+				insert_tag(&list, tag);
+				tag_status = TAG_DISCOVERY;
+				reset_TAG_values(&tag);
+			} else {
 				tag_status = TAG_SEND_TIMESTAMP_QUERY;
 			}
 			debug(tag, tag_status);
-			if(HAL_GetTick() - query_ticks > query_timeout){
+			if (HAL_GetTick() - query_ticks > query_timeout) {
 				tag_status = TAG_DISCOVERY;
+				reset_TAG_values(&tag);
 			}
 
 		}
 
-
-		if ((HAL_GetTick() - lora_send_ticks) > lora_send_timeout) {
-
-			print_all_tags(tag_list, tag_status);
-			free_tag_list(&tag_list);
-			lora_send_ticks = HAL_GetTick();
+		if (read_lora_packet(&lora) > 0) {
+			rdss_status = rdss_validation(lora.rxData, lora.rxSize, 0x00);
+			if (rdss_status == DATA_OK) {
+				uint8_t *rx = lora.rxData;
+				size_t temp_value = 1 + list.count * SERIALIZED_TAG_SIZE; // Or use uint32_t
+				uint8_t tag_bytes = (uint8_t) temp_value;
+				uint8_t response_length = calculate_frame_length(tag_bytes);
+				uint8_t *tx = malloc(sizeof(uint8_t) * response_length);
+				if (tx == NULL) {
+					Error_Handler();
+				}
+				memset(tx, 0, response_length);
+				memcpy(tx, rx, LORA_DATA_LENGHT_INDEX_1);
+				memcpy(tx + LORA_DATA_LENGHT_INDEX_1, &tag_bytes,
+						sizeof(tag_bytes));
+				uint8_t *tx_data = tx + LORA_DATA_START_INDEX;
+				tx_data[0] = list.count;
+				tx_data++;
+				serialize_tag_list(&list, tx_data);
+				uint8_t CRC_INDEX = LORA_DATA_START_INDEX
+						+ tx[LORA_DATA_LENGHT_INDEX_1];
+				uint8_t END_INDEX = CRC_INDEX + CRC_SIZE;
+				setCrc(tx, CRC_INDEX);
+				tx[END_INDEX] = LTEL_END_MARK;
+				HAL_GPIO_WritePin(LORA_TX_GPIO_Port, LORA_TX_Pin,
+						GPIO_PIN_RESET);
+				write_lora_RegFifo(lora.txhw, tx, response_length);
+				start_lora_transmission(lora.txhw);
+				HAL_GPIO_WritePin(LORA_TX_GPIO_Port, LORA_TX_Pin, GPIO_PIN_SET);
+				serialize_tag_list(&list, tx_data);
+				free(tx);
+				print_all_tags(&list, tag_status);
+				print_serialized_tags(&list);
+				free_tag_list(&list);
+				restart_lora_rx_continuous_mode(&lora);
+			} else {
+				lora_reset(lora.txhw);
+				lora_reset(lora.rxhw);
+				init_lora_parameters(&lora);
+			}
 		}
 
-
+		if (((HAL_GetTick() - lora_send_ticks) > lora_send_timeout)
+				&& tag_status == TAG_DISCOVERY) {
+			debug_status(tag_status);
+			size_t temp_value = 1 + list.count * SERIALIZED_TAG_SIZE; // Or use uint32_t
+			uint8_t tag_bytes = (uint8_t) temp_value;
+			uint8_t response_length = calculate_frame_length(tag_bytes);
+			uint8_t tx[response_length];
+			memset(tx, 0, response_length);
+			memcpy(tx + LORA_DATA_LENGHT_INDEX_1, &tag_bytes,
+					sizeof(tag_bytes));
+			uint8_t *tx_data = tx + LORA_DATA_START_INDEX;
+			tx_data[0] = list.count;
+			tx_data++;
+			serialize_tag_list(&list, tx_data);
+			uint8_t CRC_INDEX = LORA_DATA_START_INDEX
+					+ tx[LORA_DATA_LENGHT_INDEX_1];
+			uint8_t END_INDEX = CRC_INDEX + CRC_SIZE;
+			setCrc(tx, CRC_INDEX);
+			tx[END_INDEX] = LTEL_END_MARK;
+			print_all_tags(&list, tag_status);
+			print_serialized_tags(&list);
+			print_tx_hex(tx, response_length);
+			free_tag_list(&list);
+			lora_send_ticks = HAL_GetTick();
+		}
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
@@ -329,12 +339,46 @@ void SystemClock_Config(void)
   RCC_ClkInitStruct.SYSCLKSource = RCC_SYSCLKSOURCE_PLLCLK;
   RCC_ClkInitStruct.AHBCLKDivider = RCC_SYSCLK_DIV1;
   RCC_ClkInitStruct.APB1CLKDivider = RCC_HCLK_DIV2;
-  RCC_ClkInitStruct.APB2CLKDivider = RCC_HCLK_DIV1;
+  RCC_ClkInitStruct.APB2CLKDivider = RCC_HCLK_DIV8;
 
   if (HAL_RCC_ClockConfig(&RCC_ClkInitStruct, FLASH_LATENCY_2) != HAL_OK)
   {
     Error_Handler();
   }
+}
+
+/**
+  * @brief I2C1 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_I2C1_Init(void)
+{
+
+  /* USER CODE BEGIN I2C1_Init 0 */
+
+  /* USER CODE END I2C1_Init 0 */
+
+  /* USER CODE BEGIN I2C1_Init 1 */
+
+  /* USER CODE END I2C1_Init 1 */
+  hi2c1.Instance = I2C1;
+  hi2c1.Init.ClockSpeed = 100000;
+  hi2c1.Init.DutyCycle = I2C_DUTYCYCLE_2;
+  hi2c1.Init.OwnAddress1 = 0;
+  hi2c1.Init.AddressingMode = I2C_ADDRESSINGMODE_7BIT;
+  hi2c1.Init.DualAddressMode = I2C_DUALADDRESS_DISABLE;
+  hi2c1.Init.OwnAddress2 = 0;
+  hi2c1.Init.GeneralCallMode = I2C_GENERALCALL_DISABLE;
+  hi2c1.Init.NoStretchMode = I2C_NOSTRETCH_DISABLE;
+  if (HAL_I2C_Init(&hi2c1) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN I2C1_Init 2 */
+
+  /* USER CODE END I2C1_Init 2 */
+
 }
 
 /**
@@ -432,9 +476,9 @@ static void MX_TIM4_Init(void)
 
   /* USER CODE END TIM4_Init 1 */
   htim4.Instance = TIM4;
-  htim4.Init.Prescaler = 160-1;
+  htim4.Init.Prescaler = 7200-1;
   htim4.Init.CounterMode = TIM_COUNTERMODE_UP;
-  htim4.Init.Period = 320-1;
+  htim4.Init.Period = 6;
   htim4.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
   htim4.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
   if (HAL_TIM_Base_Init(&htim4) != HAL_OK)
@@ -474,7 +518,7 @@ static void MX_USART1_UART_Init(void)
 
   /* USER CODE END USART1_Init 1 */
   huart1.Instance = USART1;
-  huart1.Init.BaudRate = 115200;
+  huart1.Init.BaudRate = 230400;
   huart1.Init.WordLength = UART_WORDLENGTH_8B;
   huart1.Init.StopBits = UART_STOPBITS_1;
   huart1.Init.Parity = UART_PARITY_NONE;
@@ -510,27 +554,34 @@ static void MX_GPIO_Init(void)
   __HAL_RCC_GPIOB_CLK_ENABLE();
 
   /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(GPIOA, DW3000_RST_Pin|DW3000_RST_RCV_Pin, GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(GPIOA, DW3000_A_RST_Pin|DW3000_B_RST_Pin|SX1276_RX_NSS_Pin|SX1276_RX_NRST_Pin
+                          |SX1276_TX_NSS_Pin, GPIO_PIN_RESET);
 
   /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(SPI1_CS_GPIO_Port, SPI1_CS_Pin, GPIO_PIN_SET);
+  HAL_GPIO_WritePin(DW3000_A_CS_GPIO_Port, DW3000_A_CS_Pin, GPIO_PIN_SET);
 
   /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(SPI2_CS_GPIO_Port, SPI2_CS_Pin, GPIO_PIN_SET);
+  HAL_GPIO_WritePin(DW3000_B_CS_GPIO_Port, DW3000_B_CS_Pin, GPIO_PIN_SET);
 
-  /*Configure GPIO pins : DW3000_RST_Pin DW3000_RST_RCV_Pin */
-  GPIO_InitStruct.Pin = DW3000_RST_Pin|DW3000_RST_RCV_Pin;
+  /*Configure GPIO pin Output Level */
+  HAL_GPIO_WritePin(GPIOB, SX1276_TX_NRST_Pin|LORA_RX_Pin|LORA_TX_Pin|SX1276_TX_DIO0_Pin
+                          |SX1276_RX_DIO0_Pin, GPIO_PIN_RESET);
+
+  /*Configure GPIO pins : DW3000_A_RST_Pin DW3000_B_RST_Pin SX1276_RX_NSS_Pin SX1276_RX_NRST_Pin
+                           SX1276_TX_NSS_Pin */
+  GPIO_InitStruct.Pin = DW3000_A_RST_Pin|DW3000_B_RST_Pin|SX1276_RX_NSS_Pin|SX1276_RX_NRST_Pin
+                          |SX1276_TX_NSS_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
   HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
 
-  /*Configure GPIO pin : SPI1_CS_Pin */
-  GPIO_InitStruct.Pin = SPI1_CS_Pin;
+  /*Configure GPIO pin : DW3000_A_CS_Pin */
+  GPIO_InitStruct.Pin = DW3000_A_CS_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_PULLUP;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_HIGH;
-  HAL_GPIO_Init(SPI1_CS_GPIO_Port, &GPIO_InitStruct);
+  HAL_GPIO_Init(DW3000_A_CS_GPIO_Port, &GPIO_InitStruct);
 
   /*Configure GPIO pins : DEVICE_SELECT_Pin KEY_UP_Pin KEY_DOWN_Pin KEY_OK_Pin
                            KEY_BACK_Pin */
@@ -540,12 +591,21 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Pull = GPIO_PULLUP;
   HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
 
-  /*Configure GPIO pin : SPI2_CS_Pin */
-  GPIO_InitStruct.Pin = SPI2_CS_Pin;
+  /*Configure GPIO pin : DW3000_B_CS_Pin */
+  GPIO_InitStruct.Pin = DW3000_B_CS_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_PULLUP;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_HIGH;
-  HAL_GPIO_Init(SPI2_CS_GPIO_Port, &GPIO_InitStruct);
+  HAL_GPIO_Init(DW3000_B_CS_GPIO_Port, &GPIO_InitStruct);
+
+  /*Configure GPIO pins : SX1276_TX_NRST_Pin LORA_RX_Pin LORA_TX_Pin SX1276_TX_DIO0_Pin
+                           SX1276_RX_DIO0_Pin */
+  GPIO_InitStruct.Pin = SX1276_TX_NRST_Pin|LORA_RX_Pin|LORA_TX_Pin|SX1276_TX_DIO0_Pin
+                          |SX1276_RX_DIO0_Pin;
+  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
+  HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
 
 /* USER CODE BEGIN MX_GPIO_Init_2 */
 /* USER CODE END MX_GPIO_Init_2 */

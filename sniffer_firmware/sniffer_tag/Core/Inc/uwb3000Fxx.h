@@ -755,7 +755,7 @@ typedef struct {
 #define GAIN_3DB   0x04040404  //  3db
 #define GAIN_0DB   0x00000000  //  0db
 
-#define DISTANCE_READINGS 10
+#define DISTANCE_READINGS 30
 
 //DW-IC SPI CRC-8 polynomial
 #define POLYNOMIAL  0x07    /* x^8 + x^2 + x^1 + x^0 */
@@ -897,8 +897,6 @@ typedef struct {
 	GPIO_TypeDef *nrstPort;
 	uint16_t nrstPin;
 } SPI_HW_t;
-
-
 
 extern SPI_HW_t *hw;
 extern dwt_local_data_t *pdw3000local;

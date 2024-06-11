@@ -85,10 +85,10 @@ void Error_Handler(void);
 /* USER CODE END EFP */
 
 /* Private defines -----------------------------------------------------------*/
-#define DW3000_RST_Pin GPIO_PIN_0
-#define DW3000_RST_GPIO_Port GPIOA
-#define SPI1_CS_Pin GPIO_PIN_4
-#define SPI1_CS_GPIO_Port GPIOA
+#define DW3000_A_RST_Pin GPIO_PIN_0
+#define DW3000_A_RST_GPIO_Port GPIOA
+#define DW3000_A_CS_Pin GPIO_PIN_4
+#define DW3000_A_CS_GPIO_Port GPIOA
 #define DEVICE_SELECT_Pin GPIO_PIN_0
 #define DEVICE_SELECT_GPIO_Port GPIOB
 #define KEY_UP_Pin GPIO_PIN_1
@@ -99,10 +99,26 @@ void Error_Handler(void);
 #define KEY_OK_GPIO_Port GPIOB
 #define KEY_BACK_Pin GPIO_PIN_11
 #define KEY_BACK_GPIO_Port GPIOB
-#define SPI2_CS_Pin GPIO_PIN_12
-#define SPI2_CS_GPIO_Port GPIOB
-#define DW3000_RST_RCV_Pin GPIO_PIN_8
-#define DW3000_RST_RCV_GPIO_Port GPIOA
+#define DW3000_B_CS_Pin GPIO_PIN_12
+#define DW3000_B_CS_GPIO_Port GPIOB
+#define DW3000_B_RST_Pin GPIO_PIN_8
+#define DW3000_B_RST_GPIO_Port GPIOA
+#define SX1276_RX_NSS_Pin GPIO_PIN_11
+#define SX1276_RX_NSS_GPIO_Port GPIOA
+#define SX1276_RX_NRST_Pin GPIO_PIN_12
+#define SX1276_RX_NRST_GPIO_Port GPIOA
+#define SX1276_TX_NSS_Pin GPIO_PIN_15
+#define SX1276_TX_NSS_GPIO_Port GPIOA
+#define SX1276_TX_NRST_Pin GPIO_PIN_3
+#define SX1276_TX_NRST_GPIO_Port GPIOB
+#define LORA_RX_Pin GPIO_PIN_4
+#define LORA_RX_GPIO_Port GPIOB
+#define LORA_TX_Pin GPIO_PIN_5
+#define LORA_TX_GPIO_Port GPIOB
+#define SX1276_TX_DIO0_Pin GPIO_PIN_8
+#define SX1276_TX_DIO0_GPIO_Port GPIOB
+#define SX1276_RX_DIO0_Pin GPIO_PIN_9
+#define SX1276_RX_DIO0_GPIO_Port GPIOB
 
 /* USER CODE BEGIN Private defines */
 

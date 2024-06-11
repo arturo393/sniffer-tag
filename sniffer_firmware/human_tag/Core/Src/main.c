@@ -232,6 +232,7 @@ int main(void)
 				if (tag_init(&defatult_dwt_config, &defatult_dwt_txconfig,
 						&dwt_local_data, running_device, RATE_6M8) == 1)
 					Error_Handler();
+				tag_status = TAG_DISCOVERY;
 			}
 
 			else
